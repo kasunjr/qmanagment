@@ -734,7 +734,7 @@ function AdminDashboard() {
                         {staffError && <p className="text-sm text-red-500" role="alert">{staffError}</p>}
                         <div className="grid gap-4 sm:grid-cols-2">
                           <label className="space-y-1.5 text-sm font-medium text-slate-700">
-                            Staff user's name
+                            Name
                             <input
                               autoComplete="name"
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
@@ -744,7 +744,7 @@ function AdminDashboard() {
                             />
                           </label>
                           <label className="space-y-1.5 text-sm font-medium text-slate-700">
-                            Staff user's username
+                            Username
                             <input
                               autoComplete="username"
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
@@ -754,7 +754,7 @@ function AdminDashboard() {
                             />
                           </label>
                           <label className="space-y-1.5 text-sm font-medium text-slate-700">
-                            Staff user's email
+                            Email
                             <input
                               autoComplete="email"
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
@@ -765,7 +765,7 @@ function AdminDashboard() {
                             />
                           </label>
                           <label className="space-y-1.5 text-sm font-medium text-slate-700">
-                            {editingStaffId ? "New code (optional)" : "Staff user's code"}
+                            {editingStaffId ? "New code (optional)" : "Code"}
                             <input
                               autoComplete="new-password"
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
