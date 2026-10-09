@@ -2,9 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, isLoading, signOut } = useAuth();
 
   const navLinks = [
     { name: "Home", href: "/" },
@@ -22,7 +26,7 @@ export default function Navbar() {
             </span>
             <span>App</span>
           </div>
-          <div className="flex space-x-2 sm:space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-4">
             {navLinks.map((link) => {
               const isActive = pathname === link.href;
               return (
@@ -39,6 +43,29 @@ export default function Navbar() {
                 </Link>
               );
             })}
+            {!isLoading && (user ? (
+              <button
+                className="px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white sm:text-sm"
+                onClick={async () => {
+                  await signOut();
+                  router.push("/login");
+                }}
+                type="button"
+              >
+                Sign out
+              </button>
+            ) : (
+              <Link
+                className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                  pathname === "/login" || pathname === "/signup"
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+                href="/login"
+              >
+                Sign in
+              </Link>
+            ))}
           </div>
         </div>
       </div>

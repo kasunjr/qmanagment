@@ -1,5 +1,6 @@
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import { AuthProvider } from "@/components/AuthProvider";
 
 export const metadata = {
   title: "Queue Management System",
@@ -14,8 +15,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen">
-        <Navbar />
-        <main className="mx-auto max-w-7xl p-4 sm:p-6">{children}</main>
+        <AuthProvider>
+          <Navbar />
+          <main className="max-w-7xl mx-auto p-6">{children}</main>
+        </AuthProvider>
       </body>
     </html>
   );

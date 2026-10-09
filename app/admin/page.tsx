@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
 import {
   Download,
   Plus,
@@ -36,7 +38,7 @@ interface Staff {
   branchId: string;
 }
 
-export default function AdminPortal() {
+function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<"qr" | "config" | "analytics">(
     "qr",
   );
@@ -634,4 +636,21 @@ export default function AdminPortal() {
       </div>
     </div>
   );
+}
+
+export default function AdminPortal() {
+  const router = useRouter();
+  const { user, accessToken, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && (!user || !accessToken)) {
+      router.replace("/login?next=%2Fadmin");
+    }
+  }, [accessToken, isLoading, router, user]);
+
+  if (isLoading || !user || !accessToken) {
+    return <p className="py-16 text-center text-sm text-slate-500">Checking your session...</p>;
+  }
+
+  return <AdminDashboard />;
 }
