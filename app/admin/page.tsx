@@ -40,7 +40,7 @@ interface Staff {
 }
 
 function AdminDashboard() {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const [activeTab, setActiveTab] = useState<"qr" | "config" | "analytics">(
     "qr",
   );
@@ -106,13 +106,14 @@ function AdminDashboard() {
     { id: "q2", name: "General Queue A", branchId: "b2" },
   ]);
 
-  const [staff, setStaff] = useState<Staff[]>([
-    { id: "u1", name: "Alice Johnson", username: "alice.johnson", email: "alice@example.com", role: "Manager" },
-    { id: "u2", name: "Bob Smith", username: "bob.smith", email: "bob@example.com", role: "Agent" },
-  ]);
+  const [staff, setStaff] = useState<Staff[]>([]);
 
+  const [isStaffLoading, setIsStaffLoading] = useState(false);
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [staffError, setStaffError] = useState("");
   const [newItem, setNewItem] = useState<Record<string, string>>({});
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [staffForm, setStaffForm] = useState({
     name: "",
     username: "",
@@ -122,6 +123,107 @@ function AdminDashboard() {
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<Partial<Branch>>({});
+
+  useEffect(() => {
+    if (configSubTab !== "staff" || !accessToken) return;
+    const controller = new AbortController();
+
+    const loadStaff = async () => {
+      setIsStaffLoading(true);
+      setStaffError("");
+      try {
+        const response = await fetch("/api/staff-users", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const result = (await response.json().catch(() => null)) as {
+          staffUsers?: Staff[];
+          error?: string;
+        } | null;
+        if (!response.ok) throw new Error(result?.error || "Unable to load staff users.");
+        setStaff(result?.staffUsers ?? []);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setStaffError(error instanceof Error ? error.message : "Unable to load staff users.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsStaffLoading(false);
+      }
+    };
+
+    void loadStaff();
+    return () => controller.abort();
+  }, [accessToken, configSubTab]);
+
+  const resetStaffForm = () => {
+    setStaffForm({ name: "", username: "", email: "", code: "", role: "" });
+    setEditingStaffId(null);
+  };
+
+  const saveStaffUser = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!accessToken) return;
+
+    setIsSavingStaff(true);
+    setStaffError("");
+    const payload: Record<string, string> = {
+      name: staffForm.name.trim(),
+      username: staffForm.username.trim(),
+      email: staffForm.email.trim(),
+      role: staffForm.role.trim(),
+    };
+    if (staffForm.code) payload.code = staffForm.code;
+
+    try {
+      const response = await fetch(
+        editingStaffId ? `/api/staff-users/${editingStaffId}` : "/api/staff-users",
+        {
+          method: editingStaffId ? "PATCH" : "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+      const result = (await response.json().catch(() => null)) as {
+        staffUser?: Staff;
+        error?: string;
+      } | null;
+      if (!response.ok || !result?.staffUser) {
+        throw new Error(result?.error || "Unable to save staff user.");
+      }
+
+      setStaff((currentStaff) =>
+        editingStaffId
+          ? currentStaff.map((item) => item.id === editingStaffId ? result.staffUser! : item)
+          : [result.staffUser!, ...currentStaff],
+      );
+      setIsStaffModalOpen(false);
+      resetStaffForm();
+    } catch (error) {
+      setStaffError(error instanceof Error ? error.message : "Unable to save staff user.");
+    } finally {
+      setIsSavingStaff(false);
+    }
+  };
+
+  const deleteStaffUser = async (staffUser: Staff) => {
+    if (!accessToken || !window.confirm(`Delete ${staffUser.name}?`)) return;
+    setStaffError("");
+    try {
+      const response = await fetch(`/api/staff-users/${staffUser.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error || "Unable to delete staff user.");
+      setStaff((currentStaff) => currentStaff.filter((item) => item.id !== staffUser.id));
+    } catch (error) {
+      setStaffError(error instanceof Error ? error.message : "Unable to delete staff user.");
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -525,14 +627,26 @@ function AdminDashboard() {
               <div>
                 <div className="mb-6 flex justify-end">
                   <button
-                    onClick={() => setIsStaffModalOpen(true)}
+                    onClick={() => {
+                      resetStaffForm();
+                      setStaffError("");
+                      setIsStaffModalOpen(true);
+                    }}
                     className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"
                   >
                     <Plus className="w-4 h-4" /> Add staff user
                   </button>
                 </div>
 
+                {staffError && !isStaffModalOpen && (
+                  <p className="mb-4 text-sm text-red-500" role="alert">{staffError}</p>
+                )}
+                {isStaffLoading && <p className="mb-4 text-sm text-slate-500">Loading staff users...</p>}
+
                 <ul className="divide-y border rounded-lg">
+                  {!isStaffLoading && staff.length === 0 && (
+                    <li className="p-4 text-sm text-slate-500">No staff users yet.</li>
+                  )}
                   {staff.map((item) => (
                     <li
                       key={item.id}
@@ -546,14 +660,33 @@ function AdminDashboard() {
                           @{item.username} | {item.email} | Role: {item.role}
                         </p>
                       </div>
-                      <button
-                        onClick={() =>
-                          setStaff(staff.filter((u) => u.id !== item.id))
-                        }
-                        className="p-1 text-red-600 hover:bg-red-50 rounded"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          aria-label={`Edit ${item.name}`}
+                          onClick={() => {
+                            setStaffError("");
+                            setEditingStaffId(item.id);
+                            setStaffForm({
+                              name: item.name,
+                              username: item.username,
+                              email: item.email,
+                              code: "",
+                              role: item.role,
+                            });
+                            setIsStaffModalOpen(true);
+                          }}
+                          className="p-1 text-slate-600 hover:bg-slate-100 rounded"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          aria-label={`Delete ${item.name}`}
+                          onClick={() => void deleteStaffUser(item)}
+                          className="p-1 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -564,6 +697,7 @@ function AdminDashboard() {
                     onMouseDown={(event) => {
                       if (event.currentTarget === event.target) {
                         setIsStaffModalOpen(false);
+                        resetStaffForm();
                       }
                     }}
                   >
@@ -578,12 +712,15 @@ function AdminDashboard() {
                           className="text-lg font-semibold text-slate-800"
                           id="staff-modal-title"
                         >
-                          Add staff user
+                          {editingStaffId ? "Edit staff user" : "Add staff user"}
                         </h2>
                         <button
                           aria-label="Close dialog"
                           className="rounded p-1 text-slate-500 hover:bg-slate-100"
-                          onClick={() => setIsStaffModalOpen(false)}
+                          onClick={() => {
+                            setIsStaffModalOpen(false);
+                            resetStaffForm();
+                          }}
                           type="button"
                         >
                           <X className="h-5 w-5" />
@@ -592,22 +729,9 @@ function AdminDashboard() {
 
                       <form
                         className="space-y-5 p-6"
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          setStaff((currentStaff) => [
-                            ...currentStaff,
-                            {
-                              id: Date.now().toString(),
-                              name: staffForm.name.trim(),
-                              username: staffForm.username.trim(),
-                              email: staffForm.email.trim(),
-                              role: staffForm.role.trim(),
-                            },
-                          ]);
-                          setStaffForm({ name: "", username: "", email: "", code: "", role: "" });
-                          setIsStaffModalOpen(false);
-                        }}
+                        onSubmit={saveStaffUser}
                       >
+                        {staffError && <p className="text-sm text-red-500" role="alert">{staffError}</p>}
                         <div className="grid gap-4 sm:grid-cols-2">
                           <label className="space-y-1.5 text-sm font-medium text-slate-700">
                             Staff user's name
@@ -641,12 +765,12 @@ function AdminDashboard() {
                             />
                           </label>
                           <label className="space-y-1.5 text-sm font-medium text-slate-700">
-                            Staff user's code
+                            {editingStaffId ? "New code (optional)" : "Staff user's code"}
                             <input
                               autoComplete="new-password"
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
                               onChange={(event) => setStaffForm({ ...staffForm, code: event.target.value })}
-                              required
+                              required={!editingStaffId}
                               type="password"
                               value={staffForm.code}
                             />
@@ -667,7 +791,7 @@ function AdminDashboard() {
                           <button
                             className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
                             onClick={() => {
-                              setStaffForm({ name: "", username: "", email: "", code: "", role: "" });
+                              resetStaffForm();
                               setIsStaffModalOpen(false);
                             }}
                             type="button"
@@ -675,10 +799,12 @@ function AdminDashboard() {
                             Cancel
                           </button>
                           <button
-                            className="flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                            className="flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isSavingStaff}
                             type="submit"
                           >
-                            <Plus className="h-4 w-4" /> Add user
+                            <Plus className="h-4 w-4" />
+                            {isSavingStaff ? "Saving..." : editingStaffId ? "Update user" : "Add user"}
                           </button>
                         </div>
                       </form>
