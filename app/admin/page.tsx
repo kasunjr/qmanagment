@@ -34,11 +34,13 @@ interface Queue {
 interface Staff {
   id: string;
   name: string;
+  username: string;
+  email: string;
   role: string;
-  branchId: string;
 }
 
 function AdminDashboard() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"qr" | "config" | "analytics">(
     "qr",
   );
@@ -47,6 +49,13 @@ function AdminDashboard() {
   const [customerUrl, setCustomerUrl] = useState(
     "http://localhost:3000/customer",
   );
+
+  useEffect(() => {
+    if (!user?.tenant_code) return;
+    setStaffUrl(`http://localhost:3000/${user.tenant_code}/staff`);
+    setCustomerUrl(`http://localhost:3000/${user.tenant_code}/customer`);
+  }, [user?.tenant_code]);
+
   const staffQrRef = useRef<SVGSVGElement>(null);
   const customerQrRef = useRef<SVGSVGElement>(null);
 
@@ -98,11 +107,19 @@ function AdminDashboard() {
   ]);
 
   const [staff, setStaff] = useState<Staff[]>([
-    { id: "u1", name: "Alice Johnson", role: "Manager", branchId: "b1" },
-    { id: "u2", name: "Bob Smith", role: "Agent", branchId: "b2" },
+    { id: "u1", name: "Alice Johnson", username: "alice.johnson", email: "alice@example.com", role: "Manager" },
+    { id: "u2", name: "Bob Smith", username: "bob.smith", email: "bob@example.com", role: "Agent" },
   ]);
 
   const [newItem, setNewItem] = useState<Record<string, string>>({});
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [staffForm, setStaffForm] = useState({
+    name: "",
+    username: "",
+    email: "",
+    code: "",
+    role: "",
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<Partial<Branch>>({});
 
@@ -506,57 +523,12 @@ function AdminDashboard() {
 
             {configSubTab === "staff" && (
               <div>
-                <div className="flex gap-2 mb-6 max-w-2xl">
-                  <input
-                    type="text"
-                    placeholder="Staff Full Name"
-                    value={newItem.name || ""}
-                    onChange={(e) =>
-                      setNewItem({ ...newItem, name: e.target.value })
-                    }
-                    className="p-2 text-sm border rounded w-1/3"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Role (e.g. Agent)"
-                    value={newItem.role || ""}
-                    onChange={(e) =>
-                      setNewItem({ ...newItem, role: e.target.value })
-                    }
-                    className="p-2 text-sm border rounded w-1/3"
-                  />
-                  <select
-                    value={newItem.branchId || ""}
-                    onChange={(e) =>
-                      setNewItem({ ...newItem, branchId: e.target.value })
-                    }
-                    className="p-2 text-sm border rounded w-1/3"
-                  >
-                    <option value="">Select Branch</option>
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
+                <div className="mb-6 flex justify-end">
                   <button
-                    onClick={() => {
-                      if (newItem.name && newItem.branchId) {
-                        setStaff([
-                          ...staff,
-                          {
-                            id: Date.now().toString(),
-                            name: newItem.name,
-                            role: newItem.role || "Agent",
-                            branchId: newItem.branchId,
-                          },
-                        ]);
-                        setNewItem({});
-                      }
-                    }}
-                    className="flex items-center gap-1 bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"
+                    onClick={() => setIsStaffModalOpen(true)}
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"
                   >
-                    <Plus className="w-4 h-4" /> Add
+                    <Plus className="w-4 h-4" /> Add staff user
                   </button>
                 </div>
 
@@ -571,9 +543,7 @@ function AdminDashboard() {
                           {item.name}
                         </p>
                         <p className="text-xs text-slate-500">
-                          Role: {item.role} | Branch:{" "}
-                          {branches.find((b) => b.id === item.branchId)?.name ||
-                            "N/A"}
+                          @{item.username} | {item.email} | Role: {item.role}
                         </p>
                       </div>
                       <button
@@ -587,6 +557,134 @@ function AdminDashboard() {
                     </li>
                   ))}
                 </ul>
+
+                {isStaffModalOpen && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+                    onMouseDown={(event) => {
+                      if (event.currentTarget === event.target) {
+                        setIsStaffModalOpen(false);
+                      }
+                    }}
+                  >
+                    <section
+                      aria-labelledby="staff-modal-title"
+                      aria-modal="true"
+                      className="w-full max-w-xl rounded-xl border border-slate-200 bg-white shadow-2xl"
+                      role="dialog"
+                    >
+                      <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                        <h2
+                          className="text-lg font-semibold text-slate-800"
+                          id="staff-modal-title"
+                        >
+                          Add staff user
+                        </h2>
+                        <button
+                          aria-label="Close dialog"
+                          className="rounded p-1 text-slate-500 hover:bg-slate-100"
+                          onClick={() => setIsStaffModalOpen(false)}
+                          type="button"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </header>
+
+                      <form
+                        className="space-y-5 p-6"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          setStaff((currentStaff) => [
+                            ...currentStaff,
+                            {
+                              id: Date.now().toString(),
+                              name: staffForm.name.trim(),
+                              username: staffForm.username.trim(),
+                              email: staffForm.email.trim(),
+                              role: staffForm.role.trim(),
+                            },
+                          ]);
+                          setStaffForm({ name: "", username: "", email: "", code: "", role: "" });
+                          setIsStaffModalOpen(false);
+                        }}
+                      >
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                            Staff user's name
+                            <input
+                              autoComplete="name"
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                              onChange={(event) => setStaffForm({ ...staffForm, name: event.target.value })}
+                              required
+                              value={staffForm.name}
+                            />
+                          </label>
+                          <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                            Staff user's username
+                            <input
+                              autoComplete="username"
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                              onChange={(event) => setStaffForm({ ...staffForm, username: event.target.value })}
+                              required
+                              value={staffForm.username}
+                            />
+                          </label>
+                          <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                            Staff user's email
+                            <input
+                              autoComplete="email"
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                              onChange={(event) => setStaffForm({ ...staffForm, email: event.target.value })}
+                              required
+                              type="email"
+                              value={staffForm.email}
+                            />
+                          </label>
+                          <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                            Staff user's code
+                            <input
+                              autoComplete="new-password"
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                              onChange={(event) => setStaffForm({ ...staffForm, code: event.target.value })}
+                              required
+                              type="password"
+                              value={staffForm.code}
+                            />
+                          </label>
+                          <label className="space-y-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
+                            Role
+                            <input
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                              onChange={(event) => setStaffForm({ ...staffForm, role: event.target.value })}
+                              placeholder="e.g. Agent or Manager"
+                              required
+                              value={staffForm.role}
+                            />
+                          </label>
+                        </div>
+
+                        <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
+                          <button
+                            className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                            onClick={() => {
+                              setStaffForm({ name: "", username: "", email: "", code: "", role: "" });
+                              setIsStaffModalOpen(false);
+                            }}
+                            type="button"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            className="flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                            type="submit"
+                          >
+                            <Plus className="h-4 w-4" /> Add user
+                          </button>
+                        </div>
+                      </form>
+                    </section>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -649,7 +747,20 @@ export default function AdminPortal() {
   }, [accessToken, isLoading, router, user]);
 
   if (isLoading || !user || !accessToken) {
-    return <p className="py-16 text-center text-sm text-slate-500">Checking your session...</p>;
+    return (
+      <div
+        className="fixed inset-0 z-40 flex items-center justify-center"
+        role="status"
+        aria-label="Checking your session"
+      >
+        <span aria-hidden="true" className="relative h-16 w-16">
+          <span className="absolute inset-0 animate-spin rounded-full border-4 border-emerald-400/20 border-t-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.18)] motion-reduce:animate-none" />
+          <span className="absolute inset-2 animate-[spin_1.5s_linear_infinite_reverse] rounded-full border-2 border-teal-300/20 border-b-teal-300 motion-reduce:animate-none" />
+          <span className="absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full bg-emerald-300 motion-reduce:animate-none" />
+        </span>
+        <span className="sr-only">Checking your session...</span>
+      </div>
+    );
   }
 
   return <AdminDashboard />;

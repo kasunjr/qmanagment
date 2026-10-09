@@ -14,6 +14,7 @@ export interface SessionUser {
   id: string;
   email: string;
   role: "user" | "admin";
+  tenant_code: string;
 }
 
 interface AuthContextValue {

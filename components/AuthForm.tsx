@@ -57,7 +57,16 @@ export default function AuthForm({ mode }: AuthFormProps) {
   }
 
   if (isLoading || user) {
-    return <p className="py-16 text-center text-sm text-slate-500">Checking your session...</p>;
+    return (
+      <div className="flex justify-center py-16" role="status" aria-label="Checking your session">
+        <span aria-hidden="true" className="relative h-16 w-16">
+          <span className="absolute inset-0 animate-spin rounded-full border-4 border-emerald-400/20 border-t-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.18)] motion-reduce:animate-none" />
+          <span className="absolute inset-2 animate-[spin_1.5s_linear_infinite_reverse] rounded-full border-2 border-teal-300/20 border-b-teal-300 motion-reduce:animate-none" />
+          <span className="absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full bg-emerald-300 motion-reduce:animate-none" />
+        </span>
+        <span className="sr-only">Checking your session...</span>
+      </div>
+    );
   }
 
   return (
