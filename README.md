@@ -21,14 +21,14 @@ Open [http://localhost:3000](http://localhost:3000). The development server supp
 
 ## Authentication Setup
 
-Authentication API routes use PostgreSQL. Start a local PostgreSQL server/database, then create `.env.local` from the sample file and set a private JWT secret:
+Authentication and staff-user API routes use PostgreSQL. Start a local PostgreSQL server/database, then create `.env.local` from the sample file and generate two different private JWT secrets:
 
 ```powershell
 Copy-Item .env.example .env.local
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
 ```
 
-Put the generated value in `JWT_ACCESS_SECRET` in `.env.local`, set `DATABASE_URL` to your PostgreSQL connection string, and keep `AUTH_REFRESH_COOKIE_SECURE=false` for local HTTP development. Use HTTPS and secure cookies in production. Do not commit `.env.local`.
+Run the command twice. Put one value in `JWT_ACCESS_SECRET` and the other in `JWT_STAFF_ACCESS_SECRET`. Set `DATABASE_URL` to your PostgreSQL connection string, and keep `AUTH_REFRESH_COOKIE_SECURE=false` for local HTTP development. Use HTTPS and secure cookies in production. Do not commit `.env.local`.
 
 Apply database migrations, then start the app:
 
@@ -37,7 +37,7 @@ npm run db:migrate
 npm run dev
 ```
 
-Public signup always creates a regular `user`; it cannot assign or modify an admin role. Both authenticated `user` and `admin` accounts can access the current admin dashboard. Existing account roles are not changed by signup, login, or the dashboard guard.
+Public signup always creates a regular `user`; it cannot assign or modify an admin role. Each account gets a unique 7-character `tenant_code`, returned in account user data. Both authenticated `user` and `admin` accounts can access the current admin dashboard. Existing account roles are not changed by signup, login, or the dashboard guard.
 
 ### Auth Endpoints
 
@@ -51,6 +51,25 @@ All request and response bodies are JSON. Login and signup return a 15-minute ac
 | `POST /api/auth/logout` | Revoke the refresh token and clear its cookie. |
 | `GET /api/auth/me` | Return the current user; requires a bearer access token. |
 | `GET /api/admin/session` | Verify authenticated access; returns `401` without a valid token. Both supported roles are accepted. |
+
+### Staff Users and Staff Authentication
+
+Staff users are separate from account users. An authenticated account manages only staff rows matching its own `tenant_code`; each staff code is stored as a bcrypt hash. Manager CRUD requests use the account access token in `Authorization: Bearer <account-access-token>`.
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/staff-users` | List staff users for the authenticated account's tenant. |
+| `POST /api/staff-users` | Create a staff user. Required JSON: `name`, `username`, `email`, `code`; `role` is optional and defaults to `Agent`. |
+| `GET /api/staff-users/{id}` | Retrieve one staff user in the authenticated account's tenant. |
+| `PATCH /api/staff-users/{id}` | Update staff fields; send `code` only to replace the staff code. |
+| `DELETE /api/staff-users/{id}` | Delete a staff user in the authenticated account's tenant. |
+| `POST /api/staff-auth/login` | Staff login. JSON body: `{"tenant_code":"75050B6","username":"agent1","code":"staff-code"}`. Tenant code and username must match. Success sets staff-only HttpOnly cookies. |
+| `GET /api/staff-auth/me` | Verify the staff session and return the safe staff profile. Accepts the staff cookie or a staff bearer token. |
+| `POST /api/staff-auth/logout` | Clear only the staff authentication and tenant cookies. |
+
+Staff JWTs use `JWT_STAFF_ACCESS_SECRET`, a separate issuer/audience, and an 8-hour lifetime. Account tokens cannot authenticate staff sessions, and staff tokens cannot authenticate account endpoints. `/{tenantCode}/staff` is the tenant-specific staff login page. Successful login redirects to `/staff`, which is protected by middleware; without a valid staff JWT, requests are redirected to the remembered tenant login page or `/` if no tenant is known. The shared navbar hides the Admin Portal/account controls on staff routes and shows staff logout only for a verified staff session.
+
+The admin staff-user screen uses these endpoints. The queue operations on the staff counter page still use local sample state and are not yet persisted.
 
 Example endpoint check in PowerShell (the web session retains the refresh cookie):
 
@@ -91,6 +110,10 @@ npm start
 app/
   api/admin/session/route.ts  Protected admin access check
   api/auth/*/route.ts         Signup, login, refresh, logout, and identity endpoints
+  api/staff-users/route.ts    Tenant-scoped staff list and creation
+  api/staff-users/[id]/route.ts  Tenant-scoped staff retrieval, update, and deletion
+  api/staff-auth/*/route.ts   Separate staff login, session verification, and logout
+  [tenantCode]/staff/page.tsx Tenant-specific staff login page
   login/page.tsx              Login page
   signup/page.tsx             Signup page
   admin/page.tsx       Admin portal: QR codes, configuration, and analytics UI
@@ -104,12 +127,15 @@ components/
   AuthForm.tsx         Shared login/signup form
   AuthProvider.tsx     Session restoration and access-token lifecycle
   Navbar.tsx           Shared navigation bar
-middleware.ts          JWT check for /admin requests
+middleware.ts          JWT checks for /admin and /staff requests
 lib/
   auth.ts              Password, JWT, refresh-token, and request auth helpers
+  staff-auth.ts        Separate staff JWT, code verification, cookies, and request auth
+  staff-users.ts       Staff user validation and data types
   db.ts                Shared PostgreSQL connection pool
 migrations/
-  001_auth.sql         Users and refresh-token tables
+  001_auth.sql         Users, tenant codes, and refresh-token tables
+  003_staff_users.sql  Tenant-scoped staff users and hashed login codes
 scripts/
   migrate.mjs          Applies pending SQL migrations
 package.json           Scripts and dependency definitions
@@ -126,7 +152,8 @@ The application uses the Next.js App Router. Each folder under `app/` maps to a 
 | --- | --- |
 | `/` | Home |
 | `/customer` | Customer queue portal |
-| `/staff` | Staff counter terminal |
+| `/{tenantCode}/staff` | Staff login for the tenant identified by its 7-character code |
+| `/staff` | Protected staff counter terminal; requires a staff session |
 | `/admin` | Admin portal |
 | `/pricing` | Pricing plans |
 
@@ -136,6 +163,6 @@ The application uses the Next.js App Router. Each folder under `app/` maps to a 
 - Put reusable UI in `components/`; the shared navigation is in `components/Navbar.tsx`.
 - Most styling uses Tailwind utility classes. Global CSS and Tailwind directives are in `app/globals.css`; Tailwind scans the `app/` and `components/` trees.
 - Pages that use React state, event handlers, or browser APIs should be client components and start with the `"use client"` directive.
-- The queue/customer/admin portal UI still uses local React state and sample data. The authentication API persists accounts and refresh sessions in PostgreSQL, but it does not yet persist queue or admin configuration data.
+- Account auth, tenant-scoped staff-user management, and staff authentication use PostgreSQL. Customer queues and branch/service/queue configuration still use local React state and sample data; counter operations are not yet persisted.
 - Use the existing dependencies where possible: `lucide-react` for icons and `qrcode.react` for QR code rendering.
 - Before sharing changes, run `npm run build` from the project root. It performs the production build and Next.js lint/type checks. The current `npm run lint` command opens interactive ESLint setup because no ESLint configuration is checked in.
