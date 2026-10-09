@@ -3,6 +3,140 @@
 @tailwind utilities;
 
 body {
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: #09090b;
+  color: #e4e4e7;
+}
+
+input,
+select {
+  background-color: #09090b;
+  color: #f4f4f5;
+}
+
+input::placeholder {
+  color: #71717a;
+}
+
+option {
+  background-color: #18181b;
+  color: #f4f4f5;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #2dd4bf;
+}
+
+.bg-white {
+  background-color: #18181b;
+}
+
+.bg-slate-50,
+.bg-slate-50\/50 {
+  background-color: #18181b;
+}
+
+.text-slate-900,
+.text-slate-800,
+.text-slate-700 {
+  color: #f4f4f5;
+}
+
+.text-slate-600,
+.text-slate-500 {
+  color: #a1a1aa;
+}
+
+.text-slate-400 {
+  color: #71717a;
+}
+
+.border-slate-100,
+.border-slate-200 {
+  border-color: #3f3f46;
+}
+
+.border-slate-300 {
+  border-color: #52525b;
+}
+
+.bg-indigo-50 {
+  background-color: rgb(19 78 74 / 35%);
+}
+
+.bg-indigo-100 {
+  background-color: rgb(19 78 74 / 55%);
+}
+
+.bg-indigo-600 {
+  background-color: #0f766e;
+}
+
+.text-indigo-900,
+.text-indigo-700,
+.text-indigo-600 {
+  color: #5eead4;
+}
+
+.border-indigo-200 {
+  border-color: #115e59;
+}
+
+.border-indigo-600 {
+  border-color: #14b8a6;
+}
+
+.hover\:bg-indigo-700:hover {
+  background-color: #0d9488;
+}
+
+.hover\:border-indigo-500:hover {
+  border-color: #14b8a6;
+}
+
+.focus\:ring-indigo-500:focus {
+  --tw-ring-color: #2dd4bf;
+}
+
+.bg-emerald-50,
+.bg-emerald-100 {
+  background-color: rgb(6 78 59 / 35%);
+}
+
+.border-emerald-200 {
+  border-color: #065f46;
+}
+
+.text-emerald-900,
+.text-emerald-800,
+.text-emerald-700,
+.text-emerald-600 {
+  color: #6ee7b7;
+}
+
+.hover\:bg-emerald-700:hover {
+  background-color: #047857;
+}
+
+.bg-amber-100 {
+  background-color: rgb(120 53 15 / 35%);
+}
+
+.text-amber-700 {
+  color: #fcd34d;
+}
+
+.bg-slate-100 {
+  background-color: #27272a;
+}
+
+.hover\:bg-slate-50:hover,
+.hover\:bg-slate-100:hover {
+  background-color: #27272a;
+}
+
+.hover\:text-slate-900:hover,
+.hover\:text-slate-800:hover {
+  color: #fafafa;
 }
