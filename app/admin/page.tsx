@@ -24,7 +24,7 @@ interface Branch {
 interface Service {
   id: string;
   name: string;
-  duration: string;
+  duration_minutes: number;
 }
 interface Queue {
   id: string;
@@ -91,20 +91,21 @@ function AdminDashboard() {
     "branches" | "services" | "queues" | "staff"
   >("branches");
 
-  const [branches, setBranches] = useState<Branch[]>([
-    { id: "b1", name: "Main HQ", code: "HQ01" },
-    { id: "b2", name: "Downtown Branch", code: "DT02" },
-  ]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [isBranchesLoading, setIsBranchesLoading] = useState(false);
+  const [isSavingBranch, setIsSavingBranch] = useState(false);
+  const [branchError, setBranchError] = useState("");
+  const [branchForm, setBranchForm] = useState({ name: "", code: "" });
 
-  const [services, setServices] = useState<Service[]>([
-    { id: "s1", name: "General Support", duration: "15 mins" },
-    { id: "s2", name: "Account Services", duration: "30 mins" },
-  ]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [isServicesLoading, setIsServicesLoading] = useState(false);
+  const [isSavingService, setIsSavingService] = useState(false);
+  const [serviceError, setServiceError] = useState("");
+  const [serviceForm, setServiceForm] = useState({ name: "", duration: "15" });
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  const [serviceEdit, setServiceEdit] = useState({ name: "", duration: "" });
 
-  const [queues, setQueues] = useState<Queue[]>([
-    { id: "q1", name: "Priority Counter 1", branchId: "b1" },
-    { id: "q2", name: "General Queue A", branchId: "b2" },
-  ]);
+  const [queues, setQueues] = useState<Queue[]>([]);
 
   const [staff, setStaff] = useState<Staff[]>([]);
 
@@ -121,8 +122,8 @@ function AdminDashboard() {
     code: "",
     role: "",
   });
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editItem, setEditItem] = useState<Partial<Branch>>({});
+  const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
+  const [branchEdit, setBranchEdit] = useState<Partial<Branch>>({});
 
   useEffect(() => {
     if (configSubTab !== "staff" || !accessToken) return;
@@ -155,6 +156,218 @@ function AdminDashboard() {
     void loadStaff();
     return () => controller.abort();
   }, [accessToken, configSubTab]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    const controller = new AbortController();
+
+    const loadBranches = async () => {
+      setIsBranchesLoading(true);
+      setBranchError("");
+      try {
+        const response = await fetch("/api/branches", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const result = (await response.json().catch(() => null)) as {
+          branches?: Branch[];
+          error?: string;
+        } | null;
+        if (!response.ok) throw new Error(result?.error || "Unable to load branches.");
+        setBranches(result?.branches ?? []);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setBranchError(error instanceof Error ? error.message : "Unable to load branches.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsBranchesLoading(false);
+      }
+    };
+
+    void loadBranches();
+    return () => controller.abort();
+  }, [accessToken]);
+
+  const addBranch = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!accessToken) return;
+
+    setIsSavingBranch(true);
+    setBranchError("");
+    try {
+      const response = await fetch("/api/branches", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: branchForm.name.trim(), code: branchForm.code.trim() }),
+      });
+      const result = (await response.json().catch(() => null)) as {
+        branch?: Branch;
+        error?: string;
+      } | null;
+      if (!response.ok || !result?.branch) {
+        throw new Error(result?.error || "Unable to create branch.");
+      }
+
+      setBranches((currentBranches) => [result.branch!, ...currentBranches]);
+      setBranchForm({ name: "", code: "" });
+    } catch (error) {
+      setBranchError(error instanceof Error ? error.message : "Unable to create branch.");
+    } finally {
+      setIsSavingBranch(false);
+    }
+  };
+
+  const updateBranch = async (branch: Branch) => {
+    if (!accessToken) return;
+
+    setIsSavingBranch(true);
+    setBranchError("");
+    try {
+      const response = await fetch(`/api/branches/${branch.id}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: (branchEdit.name ?? branch.name).trim(),
+          code: (branchEdit.code ?? branch.code).trim(),
+        }),
+      });
+      const result = (await response.json().catch(() => null)) as {
+        branch?: Branch;
+        error?: string;
+      } | null;
+      if (!response.ok || !result?.branch) {
+        throw new Error(result?.error || "Unable to update branch.");
+      }
+
+      setBranches((currentBranches) =>
+        currentBranches.map((item) => item.id === branch.id ? result.branch! : item),
+      );
+      setEditingBranchId(null);
+    } catch (error) {
+      setBranchError(error instanceof Error ? error.message : "Unable to update branch.");
+    } finally {
+      setIsSavingBranch(false);
+    }
+  };
+
+  const deleteBranch = async (branch: Branch) => {
+    if (
+      !accessToken ||
+      !window.confirm(`Delete ${branch.name}? Its queues will be deleted too.`)
+    ) return;
+    setBranchError("");
+    try {
+      const response = await fetch(`/api/branches/${branch.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error || "Unable to delete branch.");
+      setBranches((currentBranches) => currentBranches.filter((item) => item.id !== branch.id));
+    } catch (error) {
+      setBranchError(error instanceof Error ? error.message : "Unable to delete branch.");
+    }
+  };
+
+  useEffect(() => {
+    if (!accessToken) return;
+    const controller = new AbortController();
+
+    const loadServices = async () => {
+      setIsServicesLoading(true);
+      setServiceError("");
+      try {
+        const response = await fetch("/api/services", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const result = (await response.json().catch(() => null)) as {
+          services?: Service[];
+          error?: string;
+        } | null;
+        if (!response.ok) throw new Error(result?.error || "Unable to load services.");
+        setServices(result?.services ?? []);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setServiceError(error instanceof Error ? error.message : "Unable to load services.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsServicesLoading(false);
+      }
+    };
+
+    void loadServices();
+    return () => controller.abort();
+  }, [accessToken]);
+
+  const saveService = async (
+    form: { name: string; duration: string },
+    serviceId: string | null,
+  ) => {
+    if (!accessToken) return;
+
+    setIsSavingService(true);
+    setServiceError("");
+    try {
+      const response = await fetch(
+        serviceId ? `/api/services/${serviceId}` : "/api/services",
+        {
+          method: serviceId ? "PATCH" : "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: form.name.trim(),
+            duration_minutes: Number(form.duration),
+          }),
+        },
+      );
+      const result = (await response.json().catch(() => null)) as {
+        service?: Service;
+        error?: string;
+      } | null;
+      if (!response.ok || !result?.service) {
+        throw new Error(result?.error || "Unable to save service.");
+      }
+
+      setServices((currentServices) =>
+        serviceId
+          ? currentServices.map((item) => item.id === serviceId ? result.service! : item)
+          : [result.service!, ...currentServices],
+      );
+      if (serviceId) setEditingServiceId(null);
+      else setServiceForm({ name: "", duration: "15" });
+    } catch (error) {
+      setServiceError(error instanceof Error ? error.message : "Unable to save service.");
+    } finally {
+      setIsSavingService(false);
+    }
+  };
+
+  const deleteService = async (service: Service) => {
+    if (!accessToken || !window.confirm(`Delete ${service.name}?`)) return;
+    setServiceError("");
+    try {
+      const response = await fetch(`/api/services/${service.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error || "Unable to delete service.");
+      setServices((currentServices) => currentServices.filter((item) => item.id !== service.id));
+    } catch (error) {
+      setServiceError(error instanceof Error ? error.message : "Unable to delete service.");
+    }
+  };
 
   const resetStaffForm = () => {
     setStaffForm({ name: "", username: "", email: "", code: "", role: "" });
@@ -328,7 +541,7 @@ function AdminDashboard() {
                     onClick={() => {
                       setConfigSubTab(cat);
                       setNewItem({});
-                      setEditingId(null);
+                      setEditingBranchId(null);
                     }}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition ${
                       configSubTab === cat
@@ -344,66 +557,65 @@ function AdminDashboard() {
 
             {configSubTab === "branches" && (
               <div>
-                <div className="flex gap-2 mb-6 max-w-xl">
+                <form className="flex gap-2 mb-6 max-w-xl" onSubmit={addBranch}>
                   <input
                     type="text"
                     placeholder="Branch Name"
-                    value={newItem.name || ""}
+                    value={branchForm.name}
                     onChange={(e) =>
-                      setNewItem({ ...newItem, name: e.target.value })
+                      setBranchForm({ ...branchForm, name: e.target.value })
                     }
+                    required
                     className="p-2 text-sm border rounded w-1/2"
                   />
                   <input
                     type="text"
                     placeholder="Branch Code"
-                    value={newItem.code || ""}
+                    value={branchForm.code}
                     onChange={(e) =>
-                      setNewItem({ ...newItem, code: e.target.value })
+                      setBranchForm({ ...branchForm, code: e.target.value })
                     }
+                    required
                     className="p-2 text-sm border rounded w-1/2"
                   />
                   <button
-                    onClick={() => {
-                      if (newItem.name && newItem.code) {
-                        setBranches([
-                          ...branches,
-                          {
-                            id: Date.now().toString(),
-                            name: newItem.name,
-                            code: newItem.code,
-                          },
-                        ]);
-                        setNewItem({});
-                      }
-                    }}
-                    className="flex items-center gap-1 bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"
+                    type="submit"
+                    disabled={isSavingBranch}
+                    className="flex items-center gap-1 bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Plus className="w-4 h-4" /> Add
                   </button>
-                </div>
+                </form>
+
+                {branchError && (
+                  <p className="mb-4 text-sm text-red-500" role="alert">{branchError}</p>
+                )}
+                {isBranchesLoading && <p className="mb-4 text-sm text-slate-500">Loading branches...</p>}
 
                 <ul className="divide-y border rounded-lg">
+                  {!isBranchesLoading && branches.length === 0 && (
+                    <li className="p-4 text-sm text-slate-500">No branches yet.</li>
+                  )}
                   {branches.map((item) => (
                     <li
                       key={item.id}
                       className="p-4 flex items-center justify-between hover:bg-slate-50"
                     >
-                      {editingId === item.id ? (
+                      {editingBranchId === item.id ? (
                         <div className="flex gap-2 w-full mr-4">
                           <input
                             type="text"
-                            value={editItem.name || item.name}
+                            value={branchEdit.name ?? item.name}
                             onChange={(e) =>
-                              setEditItem({ ...editItem, name: e.target.value })
+                              setBranchEdit({ ...branchEdit, name: e.target.value })
                             }
                             className="p-1 border rounded text-sm w-1/2"
                           />
                           <input
                             type="text"
-                            value={editItem.code || item.code}
+                            value={branchEdit.code ?? item.code}
                             onChange={(e) =>
-                              setEditItem({ ...editItem, code: e.target.value })
+                              setBranchEdit({ ...branchEdit, code: e.target.value })
                             }
                             className="p-1 border rounded text-sm w-1/2"
                           />
@@ -420,29 +632,22 @@ function AdminDashboard() {
                       )}
 
                       <div className="flex gap-2">
-                        {editingId === item.id ? (
+                        {editingBranchId === item.id ? (
                           <>
                             <button
-                              onClick={() => {
-                                setBranches(
-                                  branches.map((b) =>
-                                    b.id === item.id
-                                      ? {
-                                          ...b,
-                                          name: editItem.name ?? b.name,
-                                          code: editItem.code ?? b.code,
-                                        }
-                                      : b,
-                                  ),
-                                );
-                                setEditingId(null);
-                              }}
-                              className="p-1 text-green-600 hover:bg-green-50 rounded"
+                              aria-label={`Save ${item.name}`}
+                              disabled={isSavingBranch}
+                              onClick={() => void updateBranch(item)}
+                              className="p-1 text-green-600 hover:bg-green-50 rounded disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               <Check className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => setEditingId(null)}
+                              aria-label="Cancel edit"
+                              onClick={() => {
+                                setBranchError("");
+                                setEditingBranchId(null);
+                              }}
                               className="p-1 text-slate-400 hover:bg-slate-100 rounded"
                             >
                               <X className="w-4 h-4" />
@@ -451,20 +656,19 @@ function AdminDashboard() {
                         ) : (
                           <>
                             <button
+                              aria-label={`Edit ${item.name}`}
                               onClick={() => {
-                                setEditingId(item.id);
-                                setEditItem(item);
+                                setBranchError("");
+                                setEditingBranchId(item.id);
+                                setBranchEdit(item);
                               }}
                               className="p-1 text-slate-600 hover:bg-slate-100 rounded"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() =>
-                                setBranches(
-                                  branches.filter((b) => b.id !== item.id),
-                                )
-                              }
+                              aria-label={`Delete ${item.name}`}
+                              onClick={() => void deleteBranch(item)}
                               className="p-1 text-red-600 hover:bg-red-50 rounded"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -480,67 +684,143 @@ function AdminDashboard() {
 
             {configSubTab === "services" && (
               <div>
-                <div className="flex gap-2 mb-6 max-w-xl">
+                <form
+                  className="flex gap-2 mb-6 max-w-xl"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void saveService(serviceForm, null);
+                  }}
+                >
                   <input
                     type="text"
                     placeholder="Service Name"
-                    value={newItem.name || ""}
+                    value={serviceForm.name}
                     onChange={(e) =>
-                      setNewItem({ ...newItem, name: e.target.value })
+                      setServiceForm({ ...serviceForm, name: e.target.value })
                     }
+                    required
                     className="p-2 text-sm border rounded w-1/2"
                   />
                   <input
-                    type="text"
-                    placeholder="Duration (e.g. 15 mins)"
-                    value={newItem.duration || ""}
+                    type="number"
+                    aria-label="Duration in minutes"
+                    placeholder="Duration (minutes)"
+                    min={1}
+                    max={1440}
+                    step={1}
+                    value={serviceForm.duration}
                     onChange={(e) =>
-                      setNewItem({ ...newItem, duration: e.target.value })
+                      setServiceForm({ ...serviceForm, duration: e.target.value })
                     }
+                    required
                     className="p-2 text-sm border rounded w-1/2"
                   />
                   <button
-                    onClick={() => {
-                      if (newItem.name) {
-                        setServices([
-                          ...services,
-                          {
-                            id: Date.now().toString(),
-                            name: newItem.name,
-                            duration: newItem.duration || "15 mins",
-                          },
-                        ]);
-                        setNewItem({});
-                      }
-                    }}
-                    className="flex items-center gap-1 bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"
+                    type="submit"
+                    disabled={isSavingService}
+                    className="flex items-center gap-1 bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Plus className="w-4 h-4" /> Add
                   </button>
-                </div>
+                </form>
+
+                {serviceError && (
+                  <p className="mb-4 text-sm text-red-500" role="alert">{serviceError}</p>
+                )}
+                {isServicesLoading && <p className="mb-4 text-sm text-slate-500">Loading services...</p>}
 
                 <ul className="divide-y border rounded-lg">
+                  {!isServicesLoading && services.length === 0 && (
+                    <li className="p-4 text-sm text-slate-500">No services yet.</li>
+                  )}
                   {services.map((item) => (
                     <li
                       key={item.id}
                       className="p-4 flex items-center justify-between hover:bg-slate-50"
                     >
-                      <div>
-                        <p className="font-semibold text-slate-800">
-                          {item.name}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          Duration: {item.duration}
-                        </p>
+                      {editingServiceId === item.id ? (
+                        <div className="flex gap-2 w-full mr-4">
+                          <input
+                            type="text"
+                            aria-label="Service name"
+                            value={serviceEdit.name}
+                            onChange={(e) =>
+                              setServiceEdit({ ...serviceEdit, name: e.target.value })
+                            }
+                            className="p-1 border rounded text-sm w-1/2"
+                          />
+                          <input
+                            type="number"
+                            aria-label="Duration in minutes"
+                            min={1}
+                            max={1440}
+                            step={1}
+                            value={serviceEdit.duration}
+                            onChange={(e) =>
+                              setServiceEdit({ ...serviceEdit, duration: e.target.value })
+                            }
+                            className="p-1 border rounded text-sm w-1/2"
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="font-semibold text-slate-800">
+                            {item.name}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Duration: {item.duration_minutes} mins
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        {editingServiceId === item.id ? (
+                          <>
+                            <button
+                              aria-label={`Save ${item.name}`}
+                              disabled={isSavingService}
+                              onClick={() => void saveService(serviceEdit, item.id)}
+                              className="p-1 text-green-600 hover:bg-green-50 rounded disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              aria-label="Cancel edit"
+                              onClick={() => {
+                                setServiceError("");
+                                setEditingServiceId(null);
+                              }}
+                              className="p-1 text-slate-400 hover:bg-slate-100 rounded"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              aria-label={`Edit ${item.name}`}
+                              onClick={() => {
+                                setServiceError("");
+                                setEditingServiceId(item.id);
+                                setServiceEdit({
+                                  name: item.name,
+                                  duration: String(item.duration_minutes),
+                                });
+                              }}
+                              className="p-1 text-slate-600 hover:bg-slate-100 rounded"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              aria-label={`Delete ${item.name}`}
+                              onClick={() => void deleteService(item)}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
-                      <button
-                        onClick={() =>
-                          setServices(services.filter((s) => s.id !== item.id))
-                        }
-                        className="p-1 text-red-600 hover:bg-red-50 rounded"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
                     </li>
                   ))}
                 </ul>
