@@ -5,6 +5,7 @@ import { Ticket, Clock, CheckCircle2 } from "lucide-react";
 
 export default function CustomerPage() {
   const [name, setName] = useState("");
+  const [branch, setBranch] = useState("");
   const [service, setService] = useState("General Support");
   const [ticket, setTicket] = useState<{ number: string; position: number } | null>(null);
 
@@ -40,6 +41,20 @@ export default function CustomerPage() {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Select Branch</label>
+            <select
+              required
+              value={branch}
+              onChange={(e) => setBranch(e.target.value)}
+              className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            >
+              <option value="">Select a branch</option>
+              <option value="Main HQ">Main HQ</option>
+              <option value="Downtown Branch">Downtown Branch</option>
+            </select>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Select Service</label>
             <select
               value={service}
@@ -64,6 +79,7 @@ export default function CustomerPage() {
           <div className="p-6 bg-indigo-50 border border-indigo-200 rounded-xl">
             <span className="text-xs uppercase tracking-widest text-indigo-600 font-bold">Your Ticket Number</span>
             <div className="text-5xl font-extrabold text-indigo-900 my-2">{ticket.number}</div>
+            <p className="text-sm text-indigo-700 font-medium">Branch: {branch}</p>
             <p className="text-sm text-indigo-700 font-medium">Service: {service}</p>
           </div>
 
