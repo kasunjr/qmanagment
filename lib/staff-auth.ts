@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import type { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { staffUserColumns, type StaffUserRecord } from "@/lib/staff-users";
+import { staffUserColumnsWithQueues, type StaffUserRecord } from "@/lib/staff-users";
 import {
   STAFF_ACCESS_COOKIE,
   STAFF_JWT_AUDIENCE,
@@ -96,7 +96,7 @@ export async function authenticateStaffRequest(
     }
 
     const result = await db.query<StaffUserRecord>(
-      `SELECT ${staffUserColumns} FROM staff_users
+      `SELECT ${staffUserColumnsWithQueues} FROM staff_users
        WHERE id = $1 AND tenant_code = $2`,
       [payload.sub, tenantCode],
     );

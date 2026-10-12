@@ -58,16 +58,18 @@ Staff users are separate from account users. An authenticated account manages on
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /api/staff-users` | List staff users for the authenticated account's tenant. |
-| `POST /api/staff-users` | Create a staff user. Required JSON: `name`, `username`, `email`, `code`; `role` is optional and defaults to `Agent`. |
-| `GET /api/staff-users/{id}` | Retrieve one staff user in the authenticated account's tenant. |
-| `PATCH /api/staff-users/{id}` | Update staff fields; send `code` only to replace the staff code. |
+| `GET /api/staff-users` | List staff users for the authenticated account's tenant, including `queue_ids`. |
+| `POST /api/staff-users` | Create a staff user. Required JSON: `name`, `username`, `email`, `code`; `role` is optional and defaults to `Agent`. Optional `queue_ids` assigns one or more tenant queues. |
+| `GET /api/staff-users/{id}` | Retrieve one staff user in the authenticated account's tenant, including `queue_ids`. |
+| `PATCH /api/staff-users/{id}` | Update staff fields; send `code` only to replace the staff code. Optional `queue_ids` replaces assignments; pass `[]` to clear them. |
 | `DELETE /api/staff-users/{id}` | Delete a staff user in the authenticated account's tenant. |
 | `POST /api/staff-auth/login` | Staff login. JSON body: `{"tenant_code":"75050B6","username":"agent1","code":"staff-code"}`. Tenant code and username must match. Success sets staff-only HttpOnly cookies. |
 | `GET /api/staff-auth/me` | Verify the staff session and return the safe staff profile. Accepts the staff cookie or a staff bearer token. |
 | `POST /api/staff-auth/logout` | Clear only the staff authentication and tenant cookies. |
 
 Staff JWTs use `JWT_STAFF_ACCESS_SECRET`, a separate issuer/audience, and an 8-hour lifetime. Account tokens cannot authenticate staff sessions, and staff tokens cannot authenticate account endpoints. `/{tenantCode}/staff` is the tenant-specific staff login page. Successful login redirects to `/staff`, which is protected by middleware; without a valid staff JWT, requests are redirected to the remembered tenant login page or `/` if no tenant is known. The shared navbar hides the Admin Portal/account controls on staff routes and shows staff logout only for a verified staff session.
+
+The staff login and `/api/staff-auth/me` responses also include the assigned `queue_ids`. Assignments can span branches within the same tenant; the database prevents cross-tenant queue assignments.
 
 The admin staff-user screen uses these endpoints. The queue operations on the staff counter page still use local sample state and are not yet persisted.
 

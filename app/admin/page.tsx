@@ -39,6 +39,7 @@ interface Staff {
   username: string;
   email: string;
   role: string;
+  queue_ids: string[];
 }
 
 function AdminDashboard() {
@@ -136,6 +137,7 @@ function AdminDashboard() {
     email: "",
     code: "",
     role: "",
+    queue_ids: [] as string[],
   });
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
   const [branchEdit, setBranchEdit] = useState<Partial<Branch>>({});
@@ -535,7 +537,7 @@ function AdminDashboard() {
   };
 
   const resetStaffForm = () => {
-    setStaffForm({ name: "", username: "", email: "", code: "", role: "" });
+    setStaffForm({ name: "", username: "", email: "", code: "", role: "", queue_ids: [] });
     setEditingStaffId(null);
   };
 
@@ -545,11 +547,12 @@ function AdminDashboard() {
 
     setIsSavingStaff(true);
     setStaffError("");
-    const payload: Record<string, string> = {
+    const payload: Record<string, unknown> = {
       name: staffForm.name.trim(),
       username: staffForm.username.trim(),
       email: staffForm.email.trim(),
       role: staffForm.role.trim(),
+      queue_ids: staffForm.queue_ids,
     };
     if (staffForm.code) payload.code = staffForm.code;
 
@@ -1243,6 +1246,11 @@ function AdminDashboard() {
                         <p className="text-xs text-slate-500">
                           @{item.username} | {item.email} | Role: {item.role}
                         </p>
+                        <p className="text-xs text-slate-500">
+                          Queues: {item.queue_ids?.length
+                            ? item.queue_ids.map((id) => queues.find((queue) => queue.id === id)?.name ?? "Unknown queue").join(", ")
+                            : "None assigned"}
+                        </p>
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -1256,6 +1264,7 @@ function AdminDashboard() {
                               email: item.email,
                               code: "",
                               role: item.role,
+                              queue_ids: item.queue_ids ?? [],
                             });
                             setIsStaffModalOpen(true);
                           }}
@@ -1370,6 +1379,44 @@ function AdminDashboard() {
                             />
                           </label>
                         </div>
+
+                        <fieldset className="space-y-2">
+                          <legend className="text-sm font-medium text-slate-700">Assigned queues</legend>
+                          {isQueuesLoading ? (
+                            <p className="text-sm text-slate-500">Loading queues...</p>
+                          ) : queues.length === 0 ? (
+                            <p className="text-sm text-slate-500">Create a queue before assigning it to staff.</p>
+                          ) : (
+                            <div className="max-h-48 space-y-3 overflow-y-auto rounded border border-slate-200 p-3">
+                              {branches.map((branch) => {
+                                const branchQueues = queues.filter((queue) => queue.branch_id === branch.id);
+                                if (!branchQueues.length) return null;
+                                return (
+                                  <div key={branch.id}>
+                                    <p className="mb-1 text-xs font-semibold text-slate-500">{branch.name}</p>
+                                    <div className="grid gap-1 sm:grid-cols-2">
+                                      {branchQueues.map((queue) => (
+                                        <label key={queue.id} className="flex items-center gap-2 text-sm text-slate-700">
+                                          <input
+                                            checked={staffForm.queue_ids.includes(queue.id)}
+                                            onChange={(event) => setStaffForm((current) => ({
+                                              ...current,
+                                              queue_ids: event.target.checked
+                                                ? [...current.queue_ids, queue.id]
+                                                : current.queue_ids.filter((id) => id !== queue.id),
+                                            }))}
+                                            type="checkbox"
+                                          />
+                                          {queue.name}{queue.is_default ? " (default)" : ""}
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </fieldset>
 
                         <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
                           <button
