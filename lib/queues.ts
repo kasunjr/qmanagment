@@ -20,7 +20,7 @@ export interface QueueFields {
 export const DEFAULT_QUEUE_NAME = "Default Queue";
 
 // A service with no queue_services row for a branch belongs to that branch's default queue.
-const serviceInQueue =
+export const serviceInQueue =
   "(qs.queue_id = q.id OR (qs.queue_id IS NULL AND q.is_default))";
 
 // Requires the queues table to be aliased as "q".
