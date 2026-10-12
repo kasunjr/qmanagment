@@ -87,15 +87,21 @@ select:focus {
   border-color: #14b8a6;
 }
 
-.hover\:bg-indigo-700:hover {
+/* Tailwind emits its hover/focus variants after this file's rules, so these
+   overrides are prefixed with "body" to outrank them. */
+body .hover\:bg-indigo-700:hover {
   background-color: #0d9488;
 }
 
-.hover\:border-indigo-500:hover {
+body .hover\:bg-indigo-50:hover {
+  background-color: rgb(19 78 74 / 35%);
+}
+
+body .hover\:border-indigo-500:hover {
   border-color: #14b8a6;
 }
 
-.focus\:ring-indigo-500:focus {
+body .focus\:ring-indigo-500:focus {
   --tw-ring-color: #2dd4bf;
 }
 
@@ -115,8 +121,16 @@ select:focus {
   color: #6ee7b7;
 }
 
-.hover\:bg-emerald-700:hover {
+body .hover\:bg-emerald-700:hover {
   background-color: #047857;
+}
+
+body .hover\:bg-green-50:hover {
+  background-color: rgb(6 78 59 / 35%);
+}
+
+body .hover\:bg-red-50:hover {
+  background-color: rgb(127 29 29 / 35%);
 }
 
 .bg-amber-100 {
@@ -131,12 +145,12 @@ select:focus {
   background-color: #27272a;
 }
 
-.hover\:bg-slate-50:hover,
-.hover\:bg-slate-100:hover {
+body .hover\:bg-slate-50:hover,
+body .hover\:bg-slate-100:hover {
   background-color: #27272a;
 }
 
-.hover\:text-slate-900:hover,
-.hover\:text-slate-800:hover {
+body .hover\:text-slate-900:hover,
+body .hover\:text-slate-800:hover {
   color: #fafafa;
 }
