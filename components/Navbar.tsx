@@ -9,7 +9,8 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading, signOut } = useAuth();
-  const isStaffRoute = pathname === "/staff" || /^\/[A-F0-9]{7}\/staff(?:\/|$)/i.test(pathname);
+  const isStaffRoute =
+    pathname === "/staff" || /^\/[A-F0-9]{7}\/staff(?:\/|$)/i.test(pathname);
   const [isStaffAuthenticated, setIsStaffAuthenticated] = useState(false);
   const [isStaffSigningOut, setIsStaffSigningOut] = useState(false);
 
@@ -46,12 +47,18 @@ export default function Navbar() {
         method: "POST",
         credentials: "same-origin",
       });
-      const result = (await response.json().catch(() => null)) as { tenantCode?: string } | null;
+      const result = (await response.json().catch(() => null)) as {
+        tenantCode?: string;
+      } | null;
       if (!response.ok) throw new Error("Unable to sign out staff user.");
 
       setIsStaffAuthenticated(false);
       const tenantCode = result?.tenantCode;
-      router.replace(tenantCode && /^[A-F0-9]{7}$/i.test(tenantCode) ? `/${tenantCode}/staff` : "/");
+      router.replace(
+        tenantCode && /^[A-F0-9]{7}$/i.test(tenantCode)
+          ? `/${tenantCode}/staff`
+          : "/",
+      );
     } catch (error) {
       console.error("Staff sign out failed:", error);
     } finally {
@@ -65,61 +72,64 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-2 font-bold text-xl tracking-wide">
             <span className="bg-teal-500 text-zinc-950 px-2 py-1 rounded">
-              Queue
+              My
             </span>
-            <span>App</span>
+            <span>Turn</span>
           </div>
           <div className="flex items-center space-x-2 sm:space-x-4">
-            {navLinks.filter((link) => !isStaffRoute || link.name !== "Admin Portal").map((link) => {
-              const isActive = pathname === link.href;
-              return (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-teal-500 text-zinc-950"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                  }`}
-                >
-                  {link.name}
-                </Link>
-              );
-            })}
-            {isStaffRoute ? (
-              isStaffAuthenticated && (
-                <button
-                  className="px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white disabled:opacity-60 sm:text-sm"
-                  disabled={isStaffSigningOut}
-                  onClick={() => void signOutStaff()}
-                  type="button"
-                >
-                  {isStaffSigningOut ? "Signing out..." : "Sign out"}
-                </button>
-              )
-            ) : !isLoading && (user ? (
-              <button
-                className="px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white sm:text-sm"
-                onClick={async () => {
-                  await signOut();
-                  router.push("/login");
-                }}
-                type="button"
-              >
-                Sign out
-              </button>
-            ) : (
-              <Link
-                className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                  pathname === "/login" || pathname === "/signup"
-                    ? "bg-indigo-600 text-white"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                }`}
-                href="/login"
-              >
-                Sign in
-              </Link>
-            ))}
+            {navLinks
+              .filter((link) => !isStaffRoute || link.name !== "Admin Portal")
+              .map((link) => {
+                const isActive = pathname === link.href;
+                return (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-teal-500 text-zinc-950"
+                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    {link.name}
+                  </Link>
+                );
+              })}
+            {isStaffRoute
+              ? isStaffAuthenticated && (
+                  <button
+                    className="px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white disabled:opacity-60 sm:text-sm"
+                    disabled={isStaffSigningOut}
+                    onClick={() => void signOutStaff()}
+                    type="button"
+                  >
+                    {isStaffSigningOut ? "Signing out..." : "Sign out"}
+                  </button>
+                )
+              : !isLoading &&
+                (user ? (
+                  <button
+                    className="px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white sm:text-sm"
+                    onClick={async () => {
+                      await signOut();
+                      router.push("/login");
+                    }}
+                    type="button"
+                  >
+                    Sign out
+                  </button>
+                ) : (
+                  <Link
+                    className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                      pathname === "/login" || pathname === "/signup"
+                        ? "bg-indigo-600 text-white"
+                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    }`}
+                    href="/login"
+                  >
+                    Sign in
+                  </Link>
+                ))}
           </div>
         </div>
       </div>

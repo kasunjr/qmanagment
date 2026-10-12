@@ -24,20 +24,19 @@ export default function HomePage() {
             A clearer way to move every queue forward.
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-400">
-            QFlow connects branch setup, customer bookings, and staff counters
+            MyTurn connects branch setup, customer bookings, and staff counters
             in one workflow. Customers join remotely, staff call the next
             ticket, and admins keep services and teams organized.
           </p>
           <p className="mt-4 max-w-2xl border-l-2 border-teal-500 pl-3 text-sm leading-6 text-zinc-500">
-            Demo behavior: tickets and queue positions are simulated. Customer
-            bookings do not sync to the staff queue, and portal changes reset
-            when you reload.
+            MyTurn: MyTurn makes managing queues simple and efficient. Your
+            Queue Management system is on your fingertips.
           </p>
           <Link
-            href="/customer"
+            href="/admin"
             className="mt-8 inline-flex items-center gap-2 rounded-lg bg-teal-400 px-5 py-3 text-sm font-bold text-zinc-950 transition hover:bg-teal-300"
           >
-            Start with a customer ticket <ArrowRight className="h-4 w-4" />
+            Join with MyTurn <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
         <div className="relative mt-10 grid max-w-3xl grid-cols-3 border-t border-zinc-800 pt-5 text-xs text-zinc-500 sm:mt-12">
@@ -69,14 +68,14 @@ export default function HomePage() {
               icon: Settings,
               title: "Set up your operation",
               description:
-                "Admins add branches, define services and queues, assign staff, and create QR codes for quick access.",
+                "Admins add branches, define services and queues, assign staff, and create QR codes for access the customer portal and staff portal.",
             },
             {
               number: "02",
               icon: QrCode,
               title: "Customers join",
               description:
-                "A customer opens the booking portal, enters their name, chooses a service, and receives a queue ticket.",
+                "A customer opens the customer portal, enters their name, chooses a branch/service, and receives a queue ticket.",
             },
             {
               number: "03",
@@ -128,7 +127,7 @@ export default function HomePage() {
         </div>
         <div className="grid gap-4 md:grid-cols-3">
           <Link
-            href="/customer"
+            href="/admin"
             className="group rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-teal-500/70 hover:bg-zinc-900/80"
           >
             <div className="mb-7 flex h-10 w-10 items-center justify-center rounded-lg bg-teal-400/10 text-teal-400">
@@ -138,14 +137,10 @@ export default function HomePage() {
             <p className="mt-2 text-sm leading-6 text-zinc-400">
               Book a service and receive a ticket with your place in line.
             </p>
-            <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-teal-400">
-              Open portal{" "}
-              <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-            </span>
           </Link>
 
           <Link
-            href="/staff"
+            href="/admin"
             className="group rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-teal-500/70 hover:bg-zinc-900/80"
           >
             <div className="mb-7 flex h-10 w-10 items-center justify-center rounded-lg bg-teal-400/10 text-teal-400">
@@ -155,10 +150,6 @@ export default function HomePage() {
             <p className="mt-2 text-sm leading-6 text-zinc-400">
               Work through the waiting queue and update ticket status.
             </p>
-            <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-teal-400">
-              Open counter{" "}
-              <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-            </span>
           </Link>
 
           <Link
@@ -172,10 +163,6 @@ export default function HomePage() {
             <p className="mt-2 text-sm leading-6 text-zinc-400">
               Manage branches, services, queues, staff, and access QR codes.
             </p>
-            <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-teal-400">
-              Manage setup{" "}
-              <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-            </span>
           </Link>
         </div>
       </section>
