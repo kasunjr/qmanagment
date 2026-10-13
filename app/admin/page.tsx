@@ -42,6 +42,24 @@ interface Staff {
   queue_ids: string[];
 }
 
+interface AnalyticsData {
+  serving_count: number;
+  average_serving_minutes: number;
+  waiting_count: number;
+  min_wait_minutes: number | null;
+  max_wait_minutes: number | null;
+  waiting_by_hour: { label: string; customers: number }[];
+}
+
+function formatWaitDuration(minutes: number | null): string {
+  if (minutes === null) return "--";
+  const roundedMinutes = Math.round(minutes);
+  if (roundedMinutes < 1) return "<1 min";
+  const hours = Math.floor(roundedMinutes / 60);
+  const remainingMinutes = roundedMinutes % 60;
+  return hours ? `${hours}h ${remainingMinutes}m` : `${remainingMinutes} min`;
+}
+
 function AdminDashboard() {
   const { user, accessToken } = useAuth();
   const [activeTab, setActiveTab] = useState<"qr" | "config" | "analytics">(
@@ -115,16 +133,67 @@ function AdminDashboard() {
   const [queueName, setQueueName] = useState("");
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
   const [queueEditName, setQueueEditName] = useState("");
-  const [addingServiceQueueId, setAddingServiceQueueId] = useState<string | null>(null);
+  const [addingServiceQueueId, setAddingServiceQueueId] = useState<
+    string | null
+  >(null);
   const [serviceToAdd, setServiceToAdd] = useState("");
   const [isAssigningService, setIsAssigningService] = useState(false);
   const [selectedBranchId, setSelectedBranchId] = useState("");
   // Falls back to the first branch until one is picked, or if the picked one was deleted.
   const queueBranch =
     branches.find((branch) => branch.id === selectedBranchId) ?? branches[0];
-  const branchQueues = queues.filter((queue) => queue.branch_id === queueBranch?.id);
+  const branchQueues = queues.filter(
+    (queue) => queue.branch_id === queueBranch?.id,
+  );
 
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState("");
+
+  useEffect(() => {
+    if (activeTab !== "analytics" || !accessToken) return;
+    const controller = new AbortController();
+
+    const loadAnalytics = async () => {
+      setIsAnalyticsLoading(true);
+      try {
+        const response = await fetch("/api/analytics", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const result = (await response.json().catch(() => null)) as
+          | (AnalyticsData & { error?: string })
+          | null;
+        if (!response.ok || !result) {
+          throw new Error(result?.error || "Unable to load analytics.");
+        }
+        setAnalytics(result);
+        setAnalyticsError("");
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setAnalyticsError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load analytics.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsAnalyticsLoading(false);
+      }
+    };
+
+    void loadAnalytics();
+    const refreshInterval = window.setInterval(
+      () => void loadAnalytics(),
+      30_000,
+    );
+    return () => {
+      controller.abort();
+      window.clearInterval(refreshInterval);
+    };
+  }, [accessToken, activeTab]);
 
   const [isStaffLoading, setIsStaffLoading] = useState(false);
   const [isSavingStaff, setIsSavingStaff] = useState(false);
@@ -159,11 +228,16 @@ function AdminDashboard() {
           staffUsers?: Staff[];
           error?: string;
         } | null;
-        if (!response.ok) throw new Error(result?.error || "Unable to load staff users.");
+        if (!response.ok)
+          throw new Error(result?.error || "Unable to load staff users.");
         setStaff(result?.staffUsers ?? []);
       } catch (error) {
         if (!controller.signal.aborted) {
-          setStaffError(error instanceof Error ? error.message : "Unable to load staff users.");
+          setStaffError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load staff users.",
+          );
         }
       } finally {
         if (!controller.signal.aborted) setIsStaffLoading(false);
@@ -191,11 +265,14 @@ function AdminDashboard() {
           branches?: Branch[];
           error?: string;
         } | null;
-        if (!response.ok) throw new Error(result?.error || "Unable to load branches.");
+        if (!response.ok)
+          throw new Error(result?.error || "Unable to load branches.");
         setBranches(result?.branches ?? []);
       } catch (error) {
         if (!controller.signal.aborted) {
-          setBranchError(error instanceof Error ? error.message : "Unable to load branches.");
+          setBranchError(
+            error instanceof Error ? error.message : "Unable to load branches.",
+          );
         }
       } finally {
         if (!controller.signal.aborted) setIsBranchesLoading(false);
@@ -219,7 +296,10 @@ function AdminDashboard() {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ name: branchForm.name.trim(), code: branchForm.code.trim() }),
+        body: JSON.stringify({
+          name: branchForm.name.trim(),
+          code: branchForm.code.trim(),
+        }),
       });
       const result = (await response.json().catch(() => null)) as {
         branch?: Branch;
@@ -232,7 +312,9 @@ function AdminDashboard() {
       setBranches((currentBranches) => [result.branch!, ...currentBranches]);
       setBranchForm({ name: "", code: "" });
     } catch (error) {
-      setBranchError(error instanceof Error ? error.message : "Unable to create branch.");
+      setBranchError(
+        error instanceof Error ? error.message : "Unable to create branch.",
+      );
     } finally {
       setIsSavingBranch(false);
     }
@@ -264,11 +346,15 @@ function AdminDashboard() {
       }
 
       setBranches((currentBranches) =>
-        currentBranches.map((item) => item.id === branch.id ? result.branch! : item),
+        currentBranches.map((item) =>
+          item.id === branch.id ? result.branch! : item,
+        ),
       );
       setEditingBranchId(null);
     } catch (error) {
-      setBranchError(error instanceof Error ? error.message : "Unable to update branch.");
+      setBranchError(
+        error instanceof Error ? error.message : "Unable to update branch.",
+      );
     } finally {
       setIsSavingBranch(false);
     }
@@ -278,18 +364,26 @@ function AdminDashboard() {
     if (
       !accessToken ||
       !window.confirm(`Delete ${branch.name}? Its queues will be deleted too.`)
-    ) return;
+    )
+      return;
     setBranchError("");
     try {
       const response = await fetch(`/api/branches/${branch.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const result = (await response.json().catch(() => null)) as { error?: string } | null;
-      if (!response.ok) throw new Error(result?.error || "Unable to delete branch.");
-      setBranches((currentBranches) => currentBranches.filter((item) => item.id !== branch.id));
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      if (!response.ok)
+        throw new Error(result?.error || "Unable to delete branch.");
+      setBranches((currentBranches) =>
+        currentBranches.filter((item) => item.id !== branch.id),
+      );
     } catch (error) {
-      setBranchError(error instanceof Error ? error.message : "Unable to delete branch.");
+      setBranchError(
+        error instanceof Error ? error.message : "Unable to delete branch.",
+      );
     }
   };
 
@@ -310,11 +404,14 @@ function AdminDashboard() {
           services?: Service[];
           error?: string;
         } | null;
-        if (!response.ok) throw new Error(result?.error || "Unable to load services.");
+        if (!response.ok)
+          throw new Error(result?.error || "Unable to load services.");
         setServices(result?.services ?? []);
       } catch (error) {
         if (!controller.signal.aborted) {
-          setServiceError(error instanceof Error ? error.message : "Unable to load services.");
+          setServiceError(
+            error instanceof Error ? error.message : "Unable to load services.",
+          );
         }
       } finally {
         if (!controller.signal.aborted) setIsServicesLoading(false);
@@ -358,13 +455,17 @@ function AdminDashboard() {
 
       setServices((currentServices) =>
         serviceId
-          ? currentServices.map((item) => item.id === serviceId ? result.service! : item)
+          ? currentServices.map((item) =>
+              item.id === serviceId ? result.service! : item,
+            )
           : [result.service!, ...currentServices],
       );
       if (serviceId) setEditingServiceId(null);
       else setServiceForm({ name: "", duration: "15" });
     } catch (error) {
-      setServiceError(error instanceof Error ? error.message : "Unable to save service.");
+      setServiceError(
+        error instanceof Error ? error.message : "Unable to save service.",
+      );
     } finally {
       setIsSavingService(false);
     }
@@ -378,11 +479,18 @@ function AdminDashboard() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const result = (await response.json().catch(() => null)) as { error?: string } | null;
-      if (!response.ok) throw new Error(result?.error || "Unable to delete service.");
-      setServices((currentServices) => currentServices.filter((item) => item.id !== service.id));
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      if (!response.ok)
+        throw new Error(result?.error || "Unable to delete service.");
+      setServices((currentServices) =>
+        currentServices.filter((item) => item.id !== service.id),
+      );
     } catch (error) {
-      setServiceError(error instanceof Error ? error.message : "Unable to delete service.");
+      setServiceError(
+        error instanceof Error ? error.message : "Unable to delete service.",
+      );
     }
   };
 
@@ -405,11 +513,14 @@ function AdminDashboard() {
           queues?: Queue[];
           error?: string;
         } | null;
-        if (!response.ok) throw new Error(result?.error || "Unable to load queues.");
+        if (!response.ok)
+          throw new Error(result?.error || "Unable to load queues.");
         setQueues(result?.queues ?? []);
       } catch (error) {
         if (!controller.signal.aborted) {
-          setQueueError(error instanceof Error ? error.message : "Unable to load queues.");
+          setQueueError(
+            error instanceof Error ? error.message : "Unable to load queues.",
+          );
         }
       } finally {
         if (!controller.signal.aborted) setIsQueuesLoading(false);
@@ -433,7 +544,10 @@ function AdminDashboard() {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ name: queueName.trim(), branch_id: queueBranch.id }),
+        body: JSON.stringify({
+          name: queueName.trim(),
+          branch_id: queueBranch.id,
+        }),
       });
       const result = (await response.json().catch(() => null)) as {
         queue?: Queue;
@@ -446,7 +560,9 @@ function AdminDashboard() {
       setQueues((currentQueues) => [...currentQueues, result.queue!]);
       setQueueName("");
     } catch (error) {
-      setQueueError(error instanceof Error ? error.message : "Unable to create queue.");
+      setQueueError(
+        error instanceof Error ? error.message : "Unable to create queue.",
+      );
     } finally {
       setIsSavingQueue(false);
     }
@@ -460,11 +576,18 @@ function AdminDashboard() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const result = (await response.json().catch(() => null)) as { error?: string } | null;
-      if (!response.ok) throw new Error(result?.error || "Unable to delete queue.");
-      setQueues((currentQueues) => currentQueues.filter((item) => item.id !== queue.id));
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      if (!response.ok)
+        throw new Error(result?.error || "Unable to delete queue.");
+      setQueues((currentQueues) =>
+        currentQueues.filter((item) => item.id !== queue.id),
+      );
     } catch (error) {
-      setQueueError(error instanceof Error ? error.message : "Unable to delete queue.");
+      setQueueError(
+        error instanceof Error ? error.message : "Unable to delete queue.",
+      );
     }
   };
 
@@ -491,11 +614,15 @@ function AdminDashboard() {
       }
 
       setQueues((currentQueues) =>
-        currentQueues.map((item) => item.id === queue.id ? result.queue! : item),
+        currentQueues.map((item) =>
+          item.id === queue.id ? result.queue! : item,
+        ),
       );
       setEditingQueueId(null);
     } catch (error) {
-      setQueueError(error instanceof Error ? error.message : "Unable to update queue.");
+      setQueueError(
+        error instanceof Error ? error.message : "Unable to update queue.",
+      );
     } finally {
       setIsSavingQueue(false);
     }
@@ -507,10 +634,13 @@ function AdminDashboard() {
     setIsAssigningService(true);
     setQueueError("");
     try {
-      const response = await fetch(`/api/queues/${queue.id}/services/${serviceId}`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      const response = await fetch(
+        `/api/queues/${queue.id}/services/${serviceId}`,
+        {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
       const result = (await response.json().catch(() => null)) as {
         queue?: Queue;
         error?: string;
@@ -524,20 +654,34 @@ function AdminDashboard() {
         currentQueues.map((item) => {
           if (item.id === queue.id) return result.queue!;
           if (item.branch_id !== queue.branch_id) return item;
-          return { ...item, service_ids: item.service_ids.filter((id) => id !== serviceId) };
+          return {
+            ...item,
+            service_ids: item.service_ids.filter((id) => id !== serviceId),
+          };
         }),
       );
       setAddingServiceQueueId(null);
       setServiceToAdd("");
     } catch (error) {
-      setQueueError(error instanceof Error ? error.message : "Unable to add service to queue.");
+      setQueueError(
+        error instanceof Error
+          ? error.message
+          : "Unable to add service to queue.",
+      );
     } finally {
       setIsAssigningService(false);
     }
   };
 
   const resetStaffForm = () => {
-    setStaffForm({ name: "", username: "", email: "", code: "", role: "", queue_ids: [] });
+    setStaffForm({
+      name: "",
+      username: "",
+      email: "",
+      code: "",
+      role: "",
+      queue_ids: [],
+    });
     setEditingStaffId(null);
   };
 
@@ -558,7 +702,9 @@ function AdminDashboard() {
 
     try {
       const response = await fetch(
-        editingStaffId ? `/api/staff-users/${editingStaffId}` : "/api/staff-users",
+        editingStaffId
+          ? `/api/staff-users/${editingStaffId}`
+          : "/api/staff-users",
         {
           method: editingStaffId ? "PATCH" : "POST",
           headers: {
@@ -578,13 +724,17 @@ function AdminDashboard() {
 
       setStaff((currentStaff) =>
         editingStaffId
-          ? currentStaff.map((item) => item.id === editingStaffId ? result.staffUser! : item)
+          ? currentStaff.map((item) =>
+              item.id === editingStaffId ? result.staffUser! : item,
+            )
           : [result.staffUser!, ...currentStaff],
       );
       setIsStaffModalOpen(false);
       resetStaffForm();
     } catch (error) {
-      setStaffError(error instanceof Error ? error.message : "Unable to save staff user.");
+      setStaffError(
+        error instanceof Error ? error.message : "Unable to save staff user.",
+      );
     } finally {
       setIsSavingStaff(false);
     }
@@ -598,11 +748,18 @@ function AdminDashboard() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const result = (await response.json().catch(() => null)) as { error?: string } | null;
-      if (!response.ok) throw new Error(result?.error || "Unable to delete staff user.");
-      setStaff((currentStaff) => currentStaff.filter((item) => item.id !== staffUser.id));
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      if (!response.ok)
+        throw new Error(result?.error || "Unable to delete staff user.");
+      setStaff((currentStaff) =>
+        currentStaff.filter((item) => item.id !== staffUser.id),
+      );
     } catch (error) {
-      setStaffError(error instanceof Error ? error.message : "Unable to delete staff user.");
+      setStaffError(
+        error instanceof Error ? error.message : "Unable to delete staff user.",
+      );
     }
   };
 
@@ -757,13 +914,21 @@ function AdminDashboard() {
                 </form>
 
                 {branchError && (
-                  <p className="mb-4 text-sm text-red-500" role="alert">{branchError}</p>
+                  <p className="mb-4 text-sm text-red-500" role="alert">
+                    {branchError}
+                  </p>
                 )}
-                {isBranchesLoading && <p className="mb-4 text-sm text-slate-500">Loading branches...</p>}
+                {isBranchesLoading && (
+                  <p className="mb-4 text-sm text-slate-500">
+                    Loading branches...
+                  </p>
+                )}
 
                 <ul className="divide-y border rounded-lg">
                   {!isBranchesLoading && branches.length === 0 && (
-                    <li className="p-4 text-sm text-slate-500">No branches yet.</li>
+                    <li className="p-4 text-sm text-slate-500">
+                      No branches yet.
+                    </li>
                   )}
                   {branches.map((item) => (
                     <li
@@ -776,7 +941,10 @@ function AdminDashboard() {
                             type="text"
                             value={branchEdit.name ?? item.name}
                             onChange={(e) =>
-                              setBranchEdit({ ...branchEdit, name: e.target.value })
+                              setBranchEdit({
+                                ...branchEdit,
+                                name: e.target.value,
+                              })
                             }
                             className="p-1 border rounded text-sm w-1/2"
                           />
@@ -784,7 +952,10 @@ function AdminDashboard() {
                             type="text"
                             value={branchEdit.code ?? item.code}
                             onChange={(e) =>
-                              setBranchEdit({ ...branchEdit, code: e.target.value })
+                              setBranchEdit({
+                                ...branchEdit,
+                                code: e.target.value,
+                              })
                             }
                             className="p-1 border rounded text-sm w-1/2"
                           />
@@ -879,7 +1050,10 @@ function AdminDashboard() {
                     step={1}
                     value={serviceForm.duration}
                     onChange={(e) =>
-                      setServiceForm({ ...serviceForm, duration: e.target.value })
+                      setServiceForm({
+                        ...serviceForm,
+                        duration: e.target.value,
+                      })
                     }
                     required
                     className="p-2 text-sm border rounded w-1/2"
@@ -894,13 +1068,21 @@ function AdminDashboard() {
                 </form>
 
                 {serviceError && (
-                  <p className="mb-4 text-sm text-red-500" role="alert">{serviceError}</p>
+                  <p className="mb-4 text-sm text-red-500" role="alert">
+                    {serviceError}
+                  </p>
                 )}
-                {isServicesLoading && <p className="mb-4 text-sm text-slate-500">Loading services...</p>}
+                {isServicesLoading && (
+                  <p className="mb-4 text-sm text-slate-500">
+                    Loading services...
+                  </p>
+                )}
 
                 <ul className="divide-y border rounded-lg">
                   {!isServicesLoading && services.length === 0 && (
-                    <li className="p-4 text-sm text-slate-500">No services yet.</li>
+                    <li className="p-4 text-sm text-slate-500">
+                      No services yet.
+                    </li>
                   )}
                   {services.map((item) => (
                     <li
@@ -914,7 +1096,10 @@ function AdminDashboard() {
                             aria-label="Service name"
                             value={serviceEdit.name}
                             onChange={(e) =>
-                              setServiceEdit({ ...serviceEdit, name: e.target.value })
+                              setServiceEdit({
+                                ...serviceEdit,
+                                name: e.target.value,
+                              })
                             }
                             className="p-1 border rounded text-sm w-1/2"
                           />
@@ -926,7 +1111,10 @@ function AdminDashboard() {
                             step={1}
                             value={serviceEdit.duration}
                             onChange={(e) =>
-                              setServiceEdit({ ...serviceEdit, duration: e.target.value })
+                              setServiceEdit({
+                                ...serviceEdit,
+                                duration: e.target.value,
+                              })
                             }
                             className="p-1 border rounded text-sm w-1/2"
                           />
@@ -948,7 +1136,9 @@ function AdminDashboard() {
                             <button
                               aria-label={`Save ${item.name}`}
                               disabled={isSavingService}
-                              onClick={() => void saveService(serviceEdit, item.id)}
+                              onClick={() =>
+                                void saveService(serviceEdit, item.id)
+                              }
                               className="p-1 text-green-600 hover:bg-green-50 rounded disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               <Check className="w-4 h-4" />
@@ -1024,7 +1214,10 @@ function AdminDashboard() {
                       </select>
                     </label>
 
-                    <form className="flex gap-2 max-w-xl mb-6" onSubmit={addQueue}>
+                    <form
+                      className="flex gap-2 max-w-xl mb-6"
+                      onSubmit={addQueue}
+                    >
                       <input
                         type="text"
                         placeholder="Queue Name"
@@ -1050,13 +1243,21 @@ function AdminDashboard() {
                     </form>
 
                     {queueError && (
-                      <p className="mb-4 text-sm text-red-500" role="alert">{queueError}</p>
+                      <p className="mb-4 text-sm text-red-500" role="alert">
+                        {queueError}
+                      </p>
                     )}
-                    {isQueuesLoading && <p className="mb-4 text-sm text-slate-500">Loading queues...</p>}
+                    {isQueuesLoading && (
+                      <p className="mb-4 text-sm text-slate-500">
+                        Loading queues...
+                      </p>
+                    )}
 
                     <ul className="divide-y border rounded-lg mb-6">
                       {!isQueuesLoading && branchQueues.length === 0 && (
-                        <li className="p-4 text-sm text-slate-500">No queues for this branch.</li>
+                        <li className="p-4 text-sm text-slate-500">
+                          No queues for this branch.
+                        </li>
                       )}
                       {branchQueues.map((item) => {
                         const addableServices = services.filter(
@@ -1065,13 +1266,21 @@ function AdminDashboard() {
                         return (
                           <li key={item.id} className="p-4 hover:bg-slate-50">
                             <div className="flex items-center justify-between">
-                              <div className={editingQueueId === item.id ? "w-full mr-4" : undefined}>
+                              <div
+                                className={
+                                  editingQueueId === item.id
+                                    ? "w-full mr-4"
+                                    : undefined
+                                }
+                              >
                                 {editingQueueId === item.id ? (
                                   <input
                                     type="text"
                                     aria-label="Queue name"
                                     value={queueEditName}
-                                    onChange={(e) => setQueueEditName(e.target.value)}
+                                    onChange={(e) =>
+                                      setQueueEditName(e.target.value)
+                                    }
                                     className="mb-1 p-1 border rounded text-sm w-1/2"
                                   />
                                 ) : (
@@ -1087,7 +1296,9 @@ function AdminDashboard() {
                                 <p className="text-xs text-slate-500">
                                   Services:{" "}
                                   {services
-                                    .filter((s) => item.service_ids.includes(s.id))
+                                    .filter((s) =>
+                                      item.service_ids.includes(s.id),
+                                    )
                                     .map((s) => s.name)
                                     .join(", ") || "None"}
                                 </p>
@@ -1140,7 +1351,8 @@ function AdminDashboard() {
                                     <Edit2 className="w-4 h-4" />
                                   </button>
                                 )}
-                                {editingQueueId === item.id ? null : item.is_default ? (
+                                {editingQueueId ===
+                                item.id ? null : item.is_default ? (
                                   // Keeps "Add service" aligned with rows that have a delete button.
                                   <span aria-hidden="true" className="w-6" />
                                 ) : (
@@ -1166,19 +1378,23 @@ function AdminDashboard() {
                                 <select
                                   aria-label={`Service to add to ${item.name}`}
                                   value={serviceToAdd}
-                                  onChange={(e) => setServiceToAdd(e.target.value)}
+                                  onChange={(e) =>
+                                    setServiceToAdd(e.target.value)
+                                  }
                                   required
                                   className="p-1 text-sm border rounded w-full"
                                 >
                                   <option value="">Select a service</option>
                                   {addableServices.map((s) => {
-                                    const currentQueue = branchQueues.find((q) =>
-                                      q.service_ids.includes(s.id),
+                                    const currentQueue = branchQueues.find(
+                                      (q) => q.service_ids.includes(s.id),
                                     );
                                     return (
                                       <option key={s.id} value={s.id}>
                                         {s.name}
-                                        {currentQueue ? ` (in ${currentQueue.name})` : ""}
+                                        {currentQueue
+                                          ? ` (in ${currentQueue.name})`
+                                          : ""}
                                       </option>
                                     );
                                   })}
@@ -1204,7 +1420,6 @@ function AdminDashboard() {
                         );
                       })}
                     </ul>
-
                   </>
                 )}
               </div>
@@ -1226,13 +1441,21 @@ function AdminDashboard() {
                 </div>
 
                 {staffError && !isStaffModalOpen && (
-                  <p className="mb-4 text-sm text-red-500" role="alert">{staffError}</p>
+                  <p className="mb-4 text-sm text-red-500" role="alert">
+                    {staffError}
+                  </p>
                 )}
-                {isStaffLoading && <p className="mb-4 text-sm text-slate-500">Loading staff users...</p>}
+                {isStaffLoading && (
+                  <p className="mb-4 text-sm text-slate-500">
+                    Loading staff users...
+                  </p>
+                )}
 
                 <ul className="divide-y border rounded-lg">
                   {!isStaffLoading && staff.length === 0 && (
-                    <li className="p-4 text-sm text-slate-500">No staff users yet.</li>
+                    <li className="p-4 text-sm text-slate-500">
+                      No staff users yet.
+                    </li>
                   )}
                   {staff.map((item) => (
                     <li
@@ -1247,8 +1470,15 @@ function AdminDashboard() {
                           @{item.username} | {item.email} | Role: {item.role}
                         </p>
                         <p className="text-xs text-slate-500">
-                          Queues: {item.queue_ids?.length
-                            ? item.queue_ids.map((id) => queues.find((queue) => queue.id === id)?.name ?? "Unknown queue").join(", ")
+                          Queues:{" "}
+                          {item.queue_ids?.length
+                            ? item.queue_ids
+                                .map(
+                                  (id) =>
+                                    queues.find((queue) => queue.id === id)
+                                      ?.name ?? "Unknown queue",
+                                )
+                                .join(", ")
                             : "None assigned"}
                         </p>
                       </div>
@@ -1305,7 +1535,9 @@ function AdminDashboard() {
                           className="text-lg font-semibold text-slate-800"
                           id="staff-modal-title"
                         >
-                          {editingStaffId ? "Edit staff user" : "Add staff user"}
+                          {editingStaffId
+                            ? "Edit staff user"
+                            : "Add staff user"}
                         </h2>
                         <button
                           aria-label="Close dialog"
@@ -1320,18 +1552,24 @@ function AdminDashboard() {
                         </button>
                       </header>
 
-                      <form
-                        className="space-y-5 p-6"
-                        onSubmit={saveStaffUser}
-                      >
-                        {staffError && <p className="text-sm text-red-500" role="alert">{staffError}</p>}
+                      <form className="space-y-5 p-6" onSubmit={saveStaffUser}>
+                        {staffError && (
+                          <p className="text-sm text-red-500" role="alert">
+                            {staffError}
+                          </p>
+                        )}
                         <div className="grid gap-4 sm:grid-cols-2">
                           <label className="space-y-1.5 text-sm font-medium text-slate-700">
                             Name
                             <input
                               autoComplete="name"
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                              onChange={(event) => setStaffForm({ ...staffForm, name: event.target.value })}
+                              onChange={(event) =>
+                                setStaffForm({
+                                  ...staffForm,
+                                  name: event.target.value,
+                                })
+                              }
                               required
                               value={staffForm.name}
                             />
@@ -1341,7 +1579,12 @@ function AdminDashboard() {
                             <input
                               autoComplete="username"
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                              onChange={(event) => setStaffForm({ ...staffForm, username: event.target.value })}
+                              onChange={(event) =>
+                                setStaffForm({
+                                  ...staffForm,
+                                  username: event.target.value,
+                                })
+                              }
                               required
                               value={staffForm.username}
                             />
@@ -1351,7 +1594,12 @@ function AdminDashboard() {
                             <input
                               autoComplete="email"
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                              onChange={(event) => setStaffForm({ ...staffForm, email: event.target.value })}
+                              onChange={(event) =>
+                                setStaffForm({
+                                  ...staffForm,
+                                  email: event.target.value,
+                                })
+                              }
                               required
                               type="email"
                               value={staffForm.email}
@@ -1362,7 +1610,12 @@ function AdminDashboard() {
                             <input
                               autoComplete="new-password"
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                              onChange={(event) => setStaffForm({ ...staffForm, code: event.target.value })}
+                              onChange={(event) =>
+                                setStaffForm({
+                                  ...staffForm,
+                                  code: event.target.value,
+                                })
+                              }
                               required={!editingStaffId}
                               type="password"
                               value={staffForm.code}
@@ -1372,7 +1625,12 @@ function AdminDashboard() {
                             Role
                             <input
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                              onChange={(event) => setStaffForm({ ...staffForm, role: event.target.value })}
+                              onChange={(event) =>
+                                setStaffForm({
+                                  ...staffForm,
+                                  role: event.target.value,
+                                })
+                              }
                               placeholder="e.g. Agent or Manager"
                               required
                               value={staffForm.role}
@@ -1381,33 +1639,56 @@ function AdminDashboard() {
                         </div>
 
                         <fieldset className="space-y-2">
-                          <legend className="text-sm font-medium text-slate-700">Assigned queues</legend>
+                          <legend className="text-sm font-medium text-slate-700">
+                            Assigned queues
+                          </legend>
                           {isQueuesLoading ? (
-                            <p className="text-sm text-slate-500">Loading queues...</p>
+                            <p className="text-sm text-slate-500">
+                              Loading queues...
+                            </p>
                           ) : queues.length === 0 ? (
-                            <p className="text-sm text-slate-500">Create a queue before assigning it to staff.</p>
+                            <p className="text-sm text-slate-500">
+                              Create a queue before assigning it to staff.
+                            </p>
                           ) : (
                             <div className="max-h-48 space-y-3 overflow-y-auto rounded border border-slate-200 p-3">
                               {branches.map((branch) => {
-                                const branchQueues = queues.filter((queue) => queue.branch_id === branch.id);
+                                const branchQueues = queues.filter(
+                                  (queue) => queue.branch_id === branch.id,
+                                );
                                 if (!branchQueues.length) return null;
                                 return (
                                   <div key={branch.id}>
-                                    <p className="mb-1 text-xs font-semibold text-slate-500">{branch.name}</p>
+                                    <p className="mb-1 text-xs font-semibold text-slate-500">
+                                      {branch.name}
+                                    </p>
                                     <div className="grid gap-1 sm:grid-cols-2">
                                       {branchQueues.map((queue) => (
-                                        <label key={queue.id} className="flex items-center gap-2 text-sm text-slate-700">
+                                        <label
+                                          key={queue.id}
+                                          className="flex items-center gap-2 text-sm text-slate-700"
+                                        >
                                           <input
-                                            checked={staffForm.queue_ids.includes(queue.id)}
-                                            onChange={(event) => setStaffForm((current) => ({
-                                              ...current,
-                                              queue_ids: event.target.checked
-                                                ? [...current.queue_ids, queue.id]
-                                                : current.queue_ids.filter((id) => id !== queue.id),
-                                            }))}
+                                            checked={staffForm.queue_ids.includes(
+                                              queue.id,
+                                            )}
+                                            onChange={(event) =>
+                                              setStaffForm((current) => ({
+                                                ...current,
+                                                queue_ids: event.target.checked
+                                                  ? [
+                                                      ...current.queue_ids,
+                                                      queue.id,
+                                                    ]
+                                                  : current.queue_ids.filter(
+                                                      (id) => id !== queue.id,
+                                                    ),
+                                              }))
+                                            }
                                             type="checkbox"
                                           />
-                                          {queue.name}{queue.is_default ? " (default)" : ""}
+                                          {queue.name}
+                                          {queue.is_default ? " (default)" : ""}
                                         </label>
                                       ))}
                                     </div>
@@ -1435,7 +1716,11 @@ function AdminDashboard() {
                             type="submit"
                           >
                             <Plus className="h-4 w-4" />
-                            {isSavingStaff ? "Saving..." : editingStaffId ? "Update user" : "Add user"}
+                            {isSavingStaff
+                              ? "Saving..."
+                              : editingStaffId
+                                ? "Update user"
+                                : "Add user"}
                           </button>
                         </div>
                       </form>
@@ -1452,6 +1737,142 @@ function AdminDashboard() {
             <h3 className="text-lg font-semibold text-slate-800">
               Operational Overview
             </h3>
+            {analyticsError && (
+              <p
+                className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                role="alert"
+              >
+                {analyticsError}
+              </p>
+            )}
+            {isAnalyticsLoading && !analytics ? (
+              <p className="text-sm text-slate-500" role="status">
+                Loading ticket analytics...
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                  {[
+                    {
+                      label: "Serving tickets",
+                      value: analytics?.serving_count ?? 0,
+                    },
+                    {
+                      label: "Avg. serving time",
+                      value:
+                        analytics && analytics.serving_count > 0
+                          ? formatWaitDuration(
+                              analytics.average_serving_minutes,
+                            )
+                          : "--",
+                    },
+                    {
+                      label: "Waiting customers",
+                      value: analytics?.waiting_count ?? 0,
+                    },
+                    {
+                      label: "Shortest wait",
+                      value: formatWaitDuration(
+                        analytics?.min_wait_minutes ?? null,
+                      ),
+                    },
+                    {
+                      label: "Longest wait",
+                      value: formatWaitDuration(
+                        analytics?.max_wait_minutes ?? null,
+                      ),
+                    },
+                  ].map((metric) => (
+                    <div
+                      key={metric.label}
+                      className="border border-slate-200 rounded-lg bg-white p-4"
+                    >
+                      <p className="text-xs font-semibold uppercase text-slate-500">
+                        {metric.label}
+                      </p>
+                      <p className="mt-2 text-2xl font-bold text-slate-800">
+                        {metric.value}
+                      </p>
+                      {metric.label === "Avg. serving time" && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Based on configured service duration
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <section
+                  className="border border-slate-200 rounded-lg bg-white p-5"
+                  aria-labelledby="waiting-chart-title"
+                >
+                  <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
+                    <h4
+                      id="waiting-chart-title"
+                      className="font-semibold text-slate-800"
+                    >
+                      Currently waiting by ticket arrival time
+                    </h4>
+                    <span className="text-sm text-slate-500">
+                      Time of day: 8 AM - 8 PM
+                    </span>
+                  </div>
+                  {analytics?.waiting_by_hour.length ? (
+                    <div className="overflow-x-auto pb-2">
+                      <div
+                        className="grid h-56 min-w-[780px] items-end gap-2 border-b border-l border-slate-200 px-3 pt-4"
+                        style={{
+                          gridTemplateColumns: `repeat(${analytics.waiting_by_hour.length}, minmax(0, 1fr))`,
+                        }}
+                        role="img"
+                        aria-label="Current waiting customers grouped by ticket arrival hour, from 8 AM to 8 PM"
+                      >
+                        {analytics.waiting_by_hour.map((bucket) => {
+                          const maxCustomers = Math.max(
+                            ...analytics.waiting_by_hour.map(
+                              (item) => item.customers,
+                            ),
+                            1,
+                          );
+                          const height = bucket.customers
+                            ? Math.max(
+                                (bucket.customers / maxCustomers) * 100,
+                                8,
+                              )
+                            : 0;
+                          return (
+                            <div
+                              key={bucket.label}
+                              className="flex h-full min-w-0 flex-col items-center justify-end gap-2"
+                            >
+                              <span className="text-sm font-semibold text-slate-700">
+                                {bucket.customers}
+                              </span>
+                              <div className="flex h-full w-full items-end">
+                                <div
+                                  className="w-full rounded-t bg-emerald-600 transition-[height]"
+                                  style={{ height: `${height}%` }}
+                                />
+                              </div>
+                              <span className="whitespace-nowrap pb-2 text-xs text-slate-600">
+                                {bucket.label}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      No waiting customers right now.
+                    </p>
+                  )}
+                  <p className="mt-2 text-right text-xs text-slate-500">
+                    Waiting customers
+                  </p>
+                </section>
+              </>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="p-4 border border-slate-200 rounded-lg bg-slate-50">
                 <p className="text-xs font-semibold text-slate-500 uppercase">
