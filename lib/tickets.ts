@@ -98,6 +98,9 @@ export async function createTicket(
        SELECT target.tenant_code, target.branch_id, $3, target.queue_id, $4, counter.last_number
        FROM target, counter
        RETURNING id, queue_id, ticket_number, ticket_date, customer_name, status, created_at
+     ), notified AS (
+       SELECT pg_notify('queue_ticket_created', ticket.queue_id::text)
+       FROM ticket
      )
      SELECT ticket.id, ticket.ticket_number, ticket.customer_name, ticket.status,
             target.branch_name, target.service_name, target.queue_name,
@@ -106,7 +109,7 @@ export async function createTicket(
              WHERE t.queue_id = ticket.queue_id AND t.ticket_date = ticket.ticket_date
                AND t.status = 'waiting') AS people_ahead,
             ticket.created_at
-     FROM ticket, target`,
+    FROM ticket, target, notified`,
     [tenantCode, fields.branch_id, fields.service_id, fields.customer_name],
   );
   return result.rows[0] ?? null;

@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, hashPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
+  isStaffQueueAssignmentConflict,
   isUniqueViolation,
   staffUserColumns,
-  staffUserColumnsWithQueues,
+  staffUserColumnsWithQueue,
   validateStaffUserFields,
   type StaffUserRecord,
 } from "@/lib/staff-users";
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
     const result = await db.query<StaffUserRecord>(
-      `SELECT ${staffUserColumnsWithQueues} FROM staff_users
+      `SELECT ${staffUserColumnsWithQueue} FROM staff_users
        WHERE tenant_code = $1 ORDER BY created_at DESC, id`,
       [user.tenant_code],
     );
@@ -44,18 +45,26 @@ export async function POST(request: NextRequest) {
     const validation = validateStaffUserFields(body);
     if ("error" in validation) return NextResponse.json({ error: validation.error }, { status: 400 });
 
-    const { name, username, email, role, code, queue_ids = [] } = validation.fields;
+    const { name, username, email, role, code, queue_id = null } = validation.fields;
     const client = await db.connect();
     try {
       await client.query("BEGIN");
-      if (queue_ids.length) {
+      if (queue_id) {
         const queueResult = await client.query<{ count: string }>(
-          "SELECT COUNT(*)::text AS count FROM queues WHERE tenant_code = $1 AND id = ANY($2::uuid[])",
-          [user.tenant_code, queue_ids],
+          "SELECT COUNT(*)::text AS count FROM queues WHERE tenant_code = $1 AND id = $2",
+          [user.tenant_code, queue_id],
         );
-        if (Number(queueResult.rows[0].count) !== queue_ids.length) {
+        if (Number(queueResult.rows[0].count) !== 1) {
           await client.query("ROLLBACK");
-          return NextResponse.json({ error: "One or more queues were not found in this tenant." }, { status: 400 });
+          return NextResponse.json({ error: "Queue was not found in this tenant." }, { status: 400 });
+        }
+        const assignedResult = await client.query(
+          "SELECT 1 FROM staff_user_queues WHERE queue_id = $1 LIMIT 1",
+          [queue_id],
+        );
+        if (assignedResult.rowCount) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({ error: "This queue is already assigned to another staff user." }, { status: 409 });
         }
       }
 
@@ -66,15 +75,15 @@ export async function POST(request: NextRequest) {
         [user.tenant_code, name, username, email, role, await hashPassword(code!)],
       );
       const staffUser = result.rows[0];
-      if (queue_ids.length) {
+      if (queue_id) {
         await client.query(
           `INSERT INTO staff_user_queues (tenant_code, staff_user_id, queue_id)
-           SELECT $1, $2, unnest($3::uuid[])`,
-          [user.tenant_code, staffUser.id, queue_ids],
+           VALUES ($1, $2, $3)`,
+          [user.tenant_code, staffUser.id, queue_id],
         );
       }
       await client.query("COMMIT");
-      return NextResponse.json({ staffUser: { ...staffUser, queue_ids } }, { status: 201 });
+      return NextResponse.json({ staffUser: { ...staffUser, queue_id } }, { status: 201 });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       throw error;
@@ -82,6 +91,9 @@ export async function POST(request: NextRequest) {
       client.release();
     }
   } catch (error) {
+    if (isStaffQueueAssignmentConflict(error)) {
+      return NextResponse.json({ error: "This queue is already assigned to another staff user." }, { status: 409 });
+    }
     if (isUniqueViolation(error)) {
       return NextResponse.json({ error: "Username or email is already used in this tenant." }, { status: 409 });
     }

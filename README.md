@@ -58,20 +58,24 @@ Staff users are separate from account users. An authenticated account manages on
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /api/staff-users` | List staff users for the authenticated account's tenant, including `queue_ids`. |
-| `POST /api/staff-users` | Create a staff user. Required JSON: `name`, `username`, `email`, `code`; `role` is optional and defaults to `Agent`. Optional `queue_ids` assigns one or more tenant queues. |
-| `GET /api/staff-users/{id}` | Retrieve one staff user in the authenticated account's tenant, including `queue_ids`. |
-| `PATCH /api/staff-users/{id}` | Update staff fields; send `code` only to replace the staff code. Optional `queue_ids` replaces assignments; pass `[]` to clear them. |
+| `GET /api/staff-users` | List staff users for the authenticated account's tenant, including `queue_id`. |
+| `POST /api/staff-users` | Create a staff user. Required JSON: `name`, `username`, `email`, `code`; `role` is optional and defaults to `Agent`. Optional `queue_id` assigns one tenant queue. |
+| `GET /api/staff-users/{id}` | Retrieve one staff user in the authenticated account's tenant, including `queue_id`. |
+| `PATCH /api/staff-users/{id}` | Update staff fields; send `code` only to replace the staff code. Optional `queue_id` replaces the assignment; pass `null` to clear it. |
 | `DELETE /api/staff-users/{id}` | Delete a staff user in the authenticated account's tenant. |
 | `POST /api/staff-auth/login` | Staff login. JSON body: `{"tenant_code":"75050B6","username":"agent1","code":"staff-code"}`. Tenant code and username must match. Success sets staff-only HttpOnly cookies. |
 | `GET /api/staff-auth/me` | Verify the staff session and return the safe staff profile. Accepts the staff cookie or a staff bearer token. |
+| `GET /api/staff/queue` | Return the authenticated staff member's assigned queue and today's tickets in that queue only. Returns `queue: null` and an empty ticket list when no queue is assigned. |
+| `GET /api/staff/queue/events` | Authenticated server-sent event stream. Sends `tickets-updated` only when a ticket is created in the staff member's assigned queue. |
+| `POST /api/staff/queue/next` | Call the longest-waiting ticket in the authenticated staff member's assigned queue by changing it from `waiting` to `serving`. Returns `409` if no queue or waiting ticket is available. |
+| `POST /api/staff/queue/complete` | Complete the current serving ticket and call the next waiting ticket in the assigned queue. Returns `409` if there is no serving ticket to complete. |
 | `POST /api/staff-auth/logout` | Clear only the staff authentication and tenant cookies. |
 
 Staff JWTs use `JWT_STAFF_ACCESS_SECRET`, a separate issuer/audience, and an 8-hour lifetime. Account tokens cannot authenticate staff sessions, and staff tokens cannot authenticate account endpoints. `/{tenantCode}/staff` is the tenant-specific staff login page. Successful login redirects to `/staff`, which is protected by middleware; without a valid staff JWT, requests are redirected to the remembered tenant login page or `/` if no tenant is known. The shared navbar hides the Admin Portal/account controls on staff routes and shows staff logout only for a verified staff session.
 
-The staff login and `/api/staff-auth/me` responses also include the assigned `queue_ids`. Assignments can span branches within the same tenant; the database prevents cross-tenant queue assignments.
+The staff login and `/api/staff-auth/me` responses also include the assigned `queue_id` (or `null`). A queue can be assigned to only one staff user, and a staff user can be assigned to only one queue. The API and database enforce tenant boundaries and unique queue ownership.
 
-The admin staff-user screen uses these endpoints. The queue operations on the staff counter page still use local sample state and are not yet persisted.
+The admin staff-user screen uses these endpoints. The staff counter page reads the assigned queue and its current-day tickets from `GET /api/staff/queue`, refreshes immediately on `tickets-updated` events, calls the longest-waiting customer with `POST /api/staff/queue/next`, and completes the serving ticket while advancing the queue with `POST /api/staff/queue/complete`.
 
 ### Branches, Services and Queues
 

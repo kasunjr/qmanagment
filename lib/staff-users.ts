@@ -7,7 +7,7 @@ export interface StaffUserRecord {
   username: string;
   email: string;
   role: string;
-  queue_ids: string[];
+  queue_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -18,15 +18,16 @@ export interface StaffUserFields {
   email?: string;
   role?: string;
   code?: string;
-  queue_ids?: string[];
+  queue_id?: string | null;
 }
 
 export const staffUserColumns =
   "id, tenant_code, name, username, email, role, created_at, updated_at";
-export const staffUserColumnsWithQueues = `${staffUserColumns}, COALESCE((
-  SELECT array_agg(suq.queue_id ORDER BY suq.queue_id)
+export const staffUserColumnsWithQueue = `${staffUserColumns}, (
+  SELECT suq.queue_id
   FROM staff_user_queues suq WHERE suq.staff_user_id = staff_users.id
-), '{}') AS queue_ids`;
+  LIMIT 1
+) AS queue_id`;
 
 export function validateStaffUserFields(
   value: unknown,
@@ -69,15 +70,11 @@ export function validateStaffUserFields(
     fields.role = "Agent";
   }
 
-  if (has("queue_ids")) {
-    if (
-      !Array.isArray(body.queue_ids) ||
-      body.queue_ids.some((id) => typeof id !== "string" || !isUuid(id)) ||
-      new Set(body.queue_ids).size !== body.queue_ids.length
-    ) {
-      return { error: "Queue IDs must be an array of unique valid queue IDs." };
+  if (has("queue_id")) {
+    if (body.queue_id !== null && (typeof body.queue_id !== "string" || !isUuid(body.queue_id))) {
+      return { error: "Queue ID must be a valid queue ID or null." };
     }
-    fields.queue_ids = body.queue_ids as string[];
+    fields.queue_id = body.queue_id as string | null;
   }
 
   if (!partial || has("code")) {
@@ -100,4 +97,9 @@ export function isUuid(value: string): boolean {
 
 export function isUniqueViolation(error: unknown): boolean {
   return !!error && typeof error === "object" && "code" in error && error.code === "23505";
+}
+
+export function isStaffQueueAssignmentConflict(error: unknown): boolean {
+  return !!error && typeof error === "object" && "constraint" in error &&
+    error.constraint === "staff_user_queues_one_staff_per_queue_idx";
 }

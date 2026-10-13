@@ -39,7 +39,7 @@ interface Staff {
   username: string;
   email: string;
   role: string;
-  queue_ids: string[];
+  queue_id: string | null;
 }
 
 interface AnalyticsData {
@@ -206,7 +206,7 @@ function AdminDashboard() {
     email: "",
     code: "",
     role: "",
-    queue_ids: [] as string[],
+    queue_id: null as string | null,
   });
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
   const [branchEdit, setBranchEdit] = useState<Partial<Branch>>({});
@@ -680,7 +680,7 @@ function AdminDashboard() {
       email: "",
       code: "",
       role: "",
-      queue_ids: [],
+      queue_id: null,
     });
     setEditingStaffId(null);
   };
@@ -696,7 +696,7 @@ function AdminDashboard() {
       username: staffForm.username.trim(),
       email: staffForm.email.trim(),
       role: staffForm.role.trim(),
-      queue_ids: staffForm.queue_ids,
+      queue_id: staffForm.queue_id,
     };
     if (staffForm.code) payload.code = staffForm.code;
 
@@ -1470,16 +1470,8 @@ function AdminDashboard() {
                           @{item.username} | {item.email} | Role: {item.role}
                         </p>
                         <p className="text-xs text-slate-500">
-                          Queues:{" "}
-                          {item.queue_ids?.length
-                            ? item.queue_ids
-                                .map(
-                                  (id) =>
-                                    queues.find((queue) => queue.id === id)
-                                      ?.name ?? "Unknown queue",
-                                )
-                                .join(", ")
-                            : "None assigned"}
+                          Queue:{" "}
+                          {queues.find((queue) => queue.id === item.queue_id)?.name ?? "None assigned"}
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -1494,7 +1486,7 @@ function AdminDashboard() {
                               email: item.email,
                               code: "",
                               role: item.role,
-                              queue_ids: item.queue_ids ?? [],
+                              queue_id: item.queue_id ?? null,
                             });
                             setIsStaffModalOpen(true);
                           }}
@@ -1638,10 +1630,8 @@ function AdminDashboard() {
                           </label>
                         </div>
 
-                        <fieldset className="space-y-2">
-                          <legend className="text-sm font-medium text-slate-700">
-                            Assigned queues
-                          </legend>
+                        <label className="block space-y-1.5 text-sm font-medium text-slate-700">
+                          Assigned queue
                           {isQueuesLoading ? (
                             <p className="text-sm text-slate-500">
                               Loading queues...
@@ -1651,53 +1641,44 @@ function AdminDashboard() {
                               Create a queue before assigning it to staff.
                             </p>
                           ) : (
-                            <div className="max-h-48 space-y-3 overflow-y-auto rounded border border-slate-200 p-3">
-                              {branches.map((branch) => {
-                                const branchQueues = queues.filter(
-                                  (queue) => queue.branch_id === branch.id,
+                            <select
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm font-normal"
+                              onChange={(event) =>
+                                setStaffForm((current) => ({
+                                  ...current,
+                                  queue_id: event.target.value || null,
+                                }))
+                              }
+                              value={staffForm.queue_id ?? ""}
+                            >
+                              <option value="">No queue assigned</option>
+                              {queues.map((queue) => {
+                                const branchName = branches.find(
+                                  (branch) => branch.id === queue.branch_id,
+                                )?.name;
+                                const assignedStaff = staff.find(
+                                  (staffUser) =>
+                                    staffUser.id !== editingStaffId &&
+                                    staffUser.queue_id === queue.id,
                                 );
-                                if (!branchQueues.length) return null;
                                 return (
-                                  <div key={branch.id}>
-                                    <p className="mb-1 text-xs font-semibold text-slate-500">
-                                      {branch.name}
-                                    </p>
-                                    <div className="grid gap-1 sm:grid-cols-2">
-                                      {branchQueues.map((queue) => (
-                                        <label
-                                          key={queue.id}
-                                          className="flex items-center gap-2 text-sm text-slate-700"
-                                        >
-                                          <input
-                                            checked={staffForm.queue_ids.includes(
-                                              queue.id,
-                                            )}
-                                            onChange={(event) =>
-                                              setStaffForm((current) => ({
-                                                ...current,
-                                                queue_ids: event.target.checked
-                                                  ? [
-                                                      ...current.queue_ids,
-                                                      queue.id,
-                                                    ]
-                                                  : current.queue_ids.filter(
-                                                      (id) => id !== queue.id,
-                                                    ),
-                                              }))
-                                            }
-                                            type="checkbox"
-                                          />
-                                          {queue.name}
-                                          {queue.is_default ? " (default)" : ""}
-                                        </label>
-                                      ))}
-                                    </div>
-                                  </div>
+                                  <option
+                                    key={queue.id}
+                                    value={queue.id}
+                                    disabled={Boolean(assignedStaff)}
+                                  >
+                                    {branchName ? `${branchName}: ` : ""}
+                                    {queue.name}
+                                    {queue.is_default ? " (default)" : ""}
+                                    {assignedStaff
+                                      ? ` (assigned to ${assignedStaff.name})`
+                                      : ""}
+                                  </option>
                                 );
                               })}
-                            </div>
+                            </select>
                           )}
-                        </fieldset>
+                        </label>
 
                         <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
                           <button
@@ -1712,7 +1693,7 @@ function AdminDashboard() {
                           </button>
                           <button
                             className="flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={isSavingStaff}
+                            disabled={isSavingStaff || isStaffLoading}
                             type="submit"
                           >
                             <Plus className="h-4 w-4" />

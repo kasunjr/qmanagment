@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, hashPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
+  isStaffQueueAssignmentConflict,
   isUniqueViolation,
   isUuid,
   staffUserColumns,
-  staffUserColumnsWithQueues,
+  staffUserColumnsWithQueue,
   validateStaffUserFields,
   type StaffUserFields,
   type StaffUserRecord,
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     if (!isUuid(params.id)) return NextResponse.json({ error: "Invalid staff user ID." }, { status: 400 });
 
     const result = await db.query<StaffUserRecord>(
-      `SELECT ${staffUserColumnsWithQueues} FROM staff_users
+      `SELECT ${staffUserColumnsWithQueue} FROM staff_users
        WHERE id = $1 AND tenant_code = $2`,
       [params.id, user.tenant_code],
     );
@@ -52,7 +53,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     const validation = validateStaffUserFields(body, true);
     if ("error" in validation) return NextResponse.json({ error: validation.error }, { status: 400 });
 
-    const { queue_ids, ...fields }: StaffUserFields = validation.fields;
+    const { queue_id, ...fields }: StaffUserFields = validation.fields;
     const values: unknown[] = [];
     const assignments: string[] = [];
     for (const [field, value] of Object.entries(fields)) {
@@ -65,14 +66,23 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     const client = await db.connect();
     try {
       await client.query("BEGIN");
-      if (queue_ids !== undefined && queue_ids.length) {
+      if (queue_id) {
         const queueResult = await client.query<{ count: string }>(
-          "SELECT COUNT(*)::text AS count FROM queues WHERE tenant_code = $1 AND id = ANY($2::uuid[])",
-          [user.tenant_code, queue_ids],
+          "SELECT COUNT(*)::text AS count FROM queues WHERE tenant_code = $1 AND id = $2",
+          [user.tenant_code, queue_id],
         );
-        if (Number(queueResult.rows[0].count) !== queue_ids.length) {
+        if (Number(queueResult.rows[0].count) !== 1) {
           await client.query("ROLLBACK");
-          return NextResponse.json({ error: "One or more queues were not found in this tenant." }, { status: 400 });
+          return NextResponse.json({ error: "Queue was not found in this tenant." }, { status: 400 });
+        }
+        const assignedResult = await client.query(
+          `SELECT 1 FROM staff_user_queues
+           WHERE queue_id = $1 AND staff_user_id <> $2 LIMIT 1`,
+          [queue_id, params.id],
+        );
+        if (assignedResult.rowCount) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({ error: "This queue is already assigned to another staff user." }, { status: 409 });
         }
       }
 
@@ -88,24 +98,24 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         return NextResponse.json({ error: "Staff user not found." }, { status: 404 });
       }
 
-      if (queue_ids !== undefined) {
+      if (queue_id !== undefined) {
         await client.query("DELETE FROM staff_user_queues WHERE staff_user_id = $1", [params.id]);
-        if (queue_ids.length) {
+        if (queue_id) {
           await client.query(
             `INSERT INTO staff_user_queues (tenant_code, staff_user_id, queue_id)
-             SELECT $1, $2, unnest($3::uuid[])`,
-            [user.tenant_code, params.id, queue_ids],
+             VALUES ($1, $2, $3)`,
+            [user.tenant_code, params.id, queue_id],
           );
         }
       }
 
-      const queueResult = await client.query<{ queue_ids: string[] }>(
-        `SELECT COALESCE(array_agg(queue_id ORDER BY queue_id), '{}') AS queue_ids
+      const queueResult = await client.query<{ queue_id: string | null }>(
+        `SELECT queue_id
          FROM staff_user_queues WHERE staff_user_id = $1`,
         [params.id],
       );
       await client.query("COMMIT");
-      return NextResponse.json({ staffUser: { ...staffUser, queue_ids: queueResult.rows[0].queue_ids } });
+      return NextResponse.json({ staffUser: { ...staffUser, queue_id: queueResult.rows[0]?.queue_id ?? null } });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       throw error;
@@ -113,6 +123,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       client.release();
     }
   } catch (error) {
+    if (isStaffQueueAssignmentConflict(error)) {
+      return NextResponse.json({ error: "This queue is already assigned to another staff user." }, { status: 409 });
+    }
     if (isUniqueViolation(error)) {
       return NextResponse.json({ error: "Username or email is already used in this tenant." }, { status: 409 });
     }
