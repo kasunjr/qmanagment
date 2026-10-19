@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { Client } from "pg";
+import { DAILY_LIMIT_CHANNEL } from "@/lib/plans";
 import { authenticateStaffRequest } from "@/lib/staff-auth";
 
 export const runtime = "nodejs";
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
   try {
     await client.connect();
     await client.query("LISTEN queue_ticket_created");
+    await client.query(`LISTEN ${DAILY_LIMIT_CHANNEL}`);
   } catch (error) {
     await client.end().catch(() => {});
     console.error("Staff queue event subscription failed:", error);
@@ -49,9 +51,16 @@ export async function GET(request: NextRequest) {
   };
   const onAbort = () => void close();
   const onNotification = (notification: { channel?: string; payload?: string }) => {
-    if (notification.channel !== "queue_ticket_created" || notification.payload !== staffUser.queue_id) return;
+    let event: string;
+    if (notification.channel === "queue_ticket_created" && notification.payload === staffUser.queue_id) {
+      event = "tickets-updated";
+    } else if (notification.channel === DAILY_LIMIT_CHANNEL && notification.payload === staffUser.tenant_code) {
+      event = "daily-limit-changed";
+    } else {
+      return;
+    }
     try {
-      streamController?.enqueue(encoder.encode("event: tickets-updated\ndata: {}\n\n"));
+      streamController?.enqueue(encoder.encode(`event: ${event}\ndata: {}\n\n`));
     } catch {
       void close();
     }

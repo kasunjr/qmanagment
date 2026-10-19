@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, hashPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { assertWithinPlanLimit, PlanLimitError, planLimitResponse } from "@/lib/plans";
 import {
   isStaffQueueAssignmentConflict,
   isUniqueViolation,
@@ -46,9 +47,12 @@ export async function POST(request: NextRequest) {
     if ("error" in validation) return NextResponse.json({ error: validation.error }, { status: 400 });
 
     const { name, username, email, role, code, queue_id = null } = validation.fields;
+    // Hashed before the transaction so the plan-limit lock is not held during bcrypt.
+    const codeHash = await hashPassword(code!);
     const client = await db.connect();
     try {
       await client.query("BEGIN");
+      await assertWithinPlanLimit(client, user.tenant_code, "staff_users");
       if (queue_id) {
         const queueResult = await client.query<{ count: string }>(
           "SELECT COUNT(*)::text AS count FROM queues WHERE tenant_code = $1 AND id = $2",
@@ -72,7 +76,7 @@ export async function POST(request: NextRequest) {
         `INSERT INTO staff_users (tenant_code, name, username, email, role, code_hash)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING ${staffUserColumns}`,
-        [user.tenant_code, name, username, email, role, await hashPassword(code!)],
+        [user.tenant_code, name, username, email, role, codeHash],
       );
       const staffUser = result.rows[0];
       if (queue_id) {
@@ -91,6 +95,7 @@ export async function POST(request: NextRequest) {
       client.release();
     }
   } catch (error) {
+    if (error instanceof PlanLimitError) return planLimitResponse(error);
     if (isStaffQueueAssignmentConflict(error)) {
       return NextResponse.json({ error: "This queue is already assigned to another staff user." }, { status: 409 });
     }

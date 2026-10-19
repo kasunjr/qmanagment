@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+<<<<<<< HEAD
 import { CheckCircle, Play, UserCheck } from "lucide-react";
 import WalkInTicketForm from "@/components/WalkInTicketForm";
 import { DEFAULT_APP_THEME, themeStyle, type AppTheme } from "@/lib/theme-style";
+=======
+import { AlertTriangle, CheckCircle, Clock3, Play, UserCheck } from "lucide-react";
+>>>>>>> 3a4e7ee (Notify to staff page when reach daily ticket limit)
 
 interface AssignedQueue {
   id: string;
@@ -23,6 +27,7 @@ interface QueueTicket {
 interface QueueResponse {
   queue: AssignedQueue | null;
   tickets: QueueTicket[];
+  daily_limit_reached?: boolean;
   error?: string;
 }
 
@@ -39,7 +44,11 @@ export default function StaffPage() {
   const [isCallingNext, setIsCallingNext] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [callError, setCallError] = useState("");
+<<<<<<< HEAD
   const [theme, setTheme] = useState<AppTheme | null>(null);
+=======
+  const [dailyLimitReached, setDailyLimitReached] = useState(false);
+>>>>>>> 3a4e7ee (Notify to staff page when reach daily ticket limit)
   const servingTicket = tickets.find((ticket) => ticket.status === "serving");
   const waitingTickets = tickets.filter((ticket) => ticket.status === "waiting");
   const completedTickets = tickets.filter((ticket) => ticket.status === "completed");
@@ -84,6 +93,7 @@ export default function StaffPage() {
         }
         setQueue(result.queue);
         setTickets(result.tickets);
+        setDailyLimitReached(result.daily_limit_reached === true);
         setError("");
       } catch (loadError) {
         if (!controller.signal.aborted) {
@@ -98,6 +108,7 @@ export default function StaffPage() {
     const events = new EventSource("/api/staff/queue/events");
     events.addEventListener("open", () => void loadQueue());
     events.addEventListener("tickets-updated", () => void loadQueue());
+    events.addEventListener("daily-limit-changed", () => void loadQueue());
     const refreshInterval = window.setInterval(() => void loadQueue(), 60_000);
     return () => {
       controller.abort();
@@ -186,8 +197,24 @@ export default function StaffPage() {
         )}
       </header>
 
+<<<<<<< HEAD
       {error && <p className="rounded-theme border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
       {callError && <p className="rounded-theme border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{callError}</p>}
+=======
+      {error && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
+      {callError && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{callError}</p>}
+      {queue && dailyLimitReached && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800" role="status">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+          <div>
+            <p className="font-semibold">Today&apos;s ticket limit has been reached.</p>
+            <p className="mt-0.5">
+              Customers can&apos;t book new tickets until tomorrow. You can still serve the tickets already in your queue.
+            </p>
+          </div>
+        </div>
+      )}
+>>>>>>> 3a4e7ee (Notify to staff page when reach daily ticket limit)
 
       {isLoading ? (
         <p className="py-10 text-center text-sm text-theme-text/60" role="status">Loading assigned queue...</p>
