@@ -71,10 +71,12 @@ export async function getTicket(tenantCode: string, ticketId: string): Promise<T
   return result.rows[0] ?? null;
 }
 
-// Returns null when the branch or service does not belong to the tenant.
+// Returns null when the branch or service does not belong to the tenant, or the service
+// does not resolve to queueId when one is given.
 export async function createTicket(
   tenantCode: string,
   fields: TicketFields,
+  queueId?: string,
 ): Promise<TicketRecord | null> {
   // One statement: the queue is resolved, the branch's daily counter is bumped, and the
   // ticket is saved with that number, so a number is never taken without its ticket.
@@ -87,6 +89,7 @@ export async function createTicket(
        JOIN services s ON s.id = $3 AND s.tenant_code = q.tenant_code
        LEFT JOIN queue_services qs ON qs.service_id = s.id AND qs.branch_id = q.branch_id
        WHERE q.branch_id = $2 AND q.tenant_code = $1 AND ${serviceInQueue}
+         AND ($5::uuid IS NULL OR q.id = $5::uuid)
      ), counter AS (
        INSERT INTO ticket_counters (branch_id, ticket_date, last_number)
        SELECT branch_id, CURRENT_DATE, 1 FROM target
@@ -110,7 +113,7 @@ export async function createTicket(
                AND t.status = 'waiting') AS people_ahead,
             ticket.created_at
     FROM ticket, target, notified`,
-    [tenantCode, fields.branch_id, fields.service_id, fields.customer_name],
+    [tenantCode, fields.branch_id, fields.service_id, fields.customer_name, queueId ?? null],
   );
   return result.rows[0] ?? null;
 }

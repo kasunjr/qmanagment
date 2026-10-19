@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import type { AppTheme } from "@/lib/theme-style";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -13,6 +14,7 @@ export default function Navbar() {
     pathname === "/staff" || /^\/[A-F0-9]{7}\/staff(?:\/|$)/i.test(pathname);
   const [isStaffAuthenticated, setIsStaffAuthenticated] = useState(false);
   const [isStaffSigningOut, setIsStaffSigningOut] = useState(false);
+  const [staffBrand, setStaffBrand] = useState<Pick<AppTheme, "app_name" | "logo_url"> | null>(null);
 
   const navLinks = [
     { name: "Home", href: "/" },
@@ -23,6 +25,7 @@ export default function Navbar() {
   useEffect(() => {
     if (!isStaffRoute) {
       setIsStaffAuthenticated(false);
+      setStaffBrand(null);
       return;
     }
 
@@ -32,7 +35,19 @@ export default function Navbar() {
       cache: "no-store",
       signal: controller.signal,
     })
-      .then((response) => setIsStaffAuthenticated(response.ok))
+      .then(async (response) => {
+        setIsStaffAuthenticated(response.ok);
+        if (!response.ok) {
+          setStaffBrand(null);
+          return;
+        }
+        const themeResponse = await fetch("/api/staff/theme", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const result = (await themeResponse.json().catch(() => null)) as { theme?: AppTheme } | null;
+        setStaffBrand(themeResponse.ok && result?.theme ? result.theme : null);
+      })
       .catch(() => {
         if (!controller.signal.aborted) setIsStaffAuthenticated(false);
       });
@@ -53,6 +68,7 @@ export default function Navbar() {
       if (!response.ok) throw new Error("Unable to sign out staff user.");
 
       setIsStaffAuthenticated(false);
+      setStaffBrand(null);
       const tenantCode = result?.tenantCode;
       router.replace(
         tenantCode && /^[A-F0-9]{7}$/i.test(tenantCode)
@@ -70,12 +86,22 @@ export default function Navbar() {
     <nav className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <div className="flex items-center space-x-2 font-bold text-xl tracking-wide">
-            <span className="bg-teal-500 text-zinc-950 px-2 py-1 rounded">
-              My
-            </span>
-            <span>Turn</span>
-          </div>
+          {isStaffRoute && staffBrand ? (
+            <div className="flex min-w-0 items-center gap-3">
+              {staffBrand.logo_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img alt="" className="h-9 w-9 shrink-0 rounded object-contain" src={staffBrand.logo_url} />
+              )}
+              <span className="truncate text-lg font-bold">{staffBrand.app_name}</span>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2 font-bold text-xl tracking-wide">
+              <span className="bg-teal-500 text-zinc-950 px-2 py-1 rounded">
+                My
+              </span>
+              <span>Turn</span>
+            </div>
+          )}
           <div className="flex items-center space-x-2 sm:space-x-4">
             {navLinks
               .filter((link) => !isStaffRoute || link.name !== "Admin Portal")

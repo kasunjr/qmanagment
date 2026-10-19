@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import ThemeCustomization from "@/components/ThemeCustomization";
 import {
   Download,
   Plus,
@@ -14,6 +15,7 @@ import {
   QrCode,
   Settings,
   BarChart3,
+  Palette,
 } from "lucide-react";
 
 interface Branch {
@@ -62,7 +64,7 @@ function formatWaitDuration(minutes: number | null): string {
 
 function AdminDashboard() {
   const { user, accessToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<"qr" | "config" | "analytics">(
+  const [activeTab, setActiveTab] = useState<"qr" | "config" | "analytics" | "customization">(
     "qr",
   );
 
@@ -798,10 +800,21 @@ function AdminDashboard() {
           >
             <BarChart3 className="w-4 h-4" /> Analytics Data
           </button>
+          <button
+            onClick={() => setActiveTab("customization")}
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-all ${
+              activeTab === "customization"
+                ? "border-indigo-600 text-indigo-600 bg-white rounded-t-lg"
+                : "border-transparent text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <Palette className="w-4 h-4" /> Customization
+          </button>
         </div>
       </div>
 
       <div className="p-6">
+        {activeTab === "customization" && <ThemeCustomization accessToken={accessToken!} />}
         {activeTab === "qr" && (
           <div className="grid md:grid-cols-2 gap-8">
             <div className="p-6 border border-slate-200 rounded-xl bg-slate-50/50 flex flex-col items-center">
