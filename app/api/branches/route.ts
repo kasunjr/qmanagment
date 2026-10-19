@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { branchColumns, validateBranchFields, type BranchRecord } from "@/lib/branches";
+import { PlanLimitError, planLimitResponse, withPlanLimit } from "@/lib/plans";
 import { DEFAULT_QUEUE_NAME } from "@/lib/queues";
 import { isUniqueViolation } from "@/lib/staff-users";
 
@@ -41,8 +42,9 @@ export async function POST(request: NextRequest) {
     if ("error" in validation) return NextResponse.json({ error: validation.error }, { status: 400 });
 
     // The branch and its default queue are created in one statement so a branch never exists without one.
+    // Only the branch limit applies: the default queue is part of the branch, even when the queue limit is reached.
     const { name, code } = validation.fields;
-    const result = await db.query<BranchRecord>(
+    const result = await withPlanLimit(user.tenant_code, "branches", (client) => client.query<BranchRecord>(
       `WITH branch AS (
          INSERT INTO branches (tenant_code, name, code)
          VALUES ($1, $2, $3)
@@ -53,9 +55,10 @@ export async function POST(request: NextRequest) {
        )
        SELECT ${branchColumns} FROM branch`,
       [user.tenant_code, name, code, DEFAULT_QUEUE_NAME],
-    );
+    ));
     return NextResponse.json({ branch: result.rows[0] }, { status: 201 });
   } catch (error) {
+    if (error instanceof PlanLimitError) return planLimitResponse(error);
     if (isUniqueViolation(error)) {
       return NextResponse.json({ error: "Branch code is already used in this tenant." }, { status: 409 });
     }
