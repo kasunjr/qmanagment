@@ -1,3 +1,4 @@
+import type { Pool, PoolClient } from "pg";
 import { db } from "@/lib/db";
 import { serviceInQueue } from "@/lib/queues";
 import { isUuid } from "@/lib/staff-users";
@@ -72,13 +73,15 @@ export async function getTicket(tenantCode: string, ticketId: string): Promise<T
 }
 
 // Returns null when the branch or service does not belong to the tenant.
+// Pass a client to create the ticket inside the caller's transaction.
 export async function createTicket(
   tenantCode: string,
   fields: TicketFields,
+  client: Pool | PoolClient = db,
 ): Promise<TicketRecord | null> {
   // One statement: the queue is resolved, the branch's daily counter is bumped, and the
   // ticket is saved with that number, so a number is never taken without its ticket.
-  const result = await db.query<TicketRecord>(
+  const result = await client.query<TicketRecord>(
     `WITH target AS (
        SELECT q.id AS queue_id, q.name AS queue_name, q.branch_id, q.tenant_code,
               b.name AS branch_name, s.name AS service_name
