@@ -24,6 +24,8 @@ interface QueueTicket {
   people_ahead: number;
 }
 
+const DAILY_LIMIT_MESSAGE = "No more tickets are available today. Please try again tomorrow.";
+
 export default function CustomerPage({
   params,
 }: {
@@ -34,6 +36,7 @@ export default function CustomerPage({
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [acceptingTickets, setAcceptingTickets] = useState(true);
 
   const [name, setName] = useState("");
   const [branchId, setBranchId] = useState("");
@@ -56,6 +59,7 @@ export default function CustomerPage({
         const result = (await response.json().catch(() => null)) as {
           branches?: Branch[];
           services?: Service[];
+          accepting_tickets?: boolean;
           error?: string;
         } | null;
         if (!response.ok) {
@@ -67,6 +71,7 @@ export default function CustomerPage({
         }
         setBranches(result?.branches ?? []);
         setServices(result?.services ?? []);
+        setAcceptingTickets(result?.accepting_tickets ?? true);
       } catch (error) {
         if (!controller.signal.aborted) {
           setLoadError(error instanceof Error ? error.message : "Unable to load booking options.");
@@ -155,6 +160,10 @@ export default function CustomerPage({
         ticket?: QueueTicket;
         error?: string;
       } | null;
+      if (response.status === 429) {
+        setAcceptingTickets(false);
+        return;
+      }
       if (!response.ok || !result?.ticket) {
         throw new Error(result?.error || "Unable to create ticket.");
       }
@@ -192,6 +201,11 @@ export default function CustomerPage({
         <p className="text-sm text-red-500" role="alert">{loadError}</p>
       ) : branches.length === 0 || services.length === 0 ? (
         <p className="text-sm text-slate-500">Booking is not available yet.</p>
+      ) : !ticket && !acceptingTickets ? (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-center" role="status">
+          <Clock className="w-6 h-6 text-amber-600 mx-auto mb-2" />
+          <p className="text-sm font-medium text-amber-800">{DAILY_LIMIT_MESSAGE}</p>
+        </div>
       ) : !ticket ? (
         <form onSubmit={handleBook} className="space-y-4">
           <div>

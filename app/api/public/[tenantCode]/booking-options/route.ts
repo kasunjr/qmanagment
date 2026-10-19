@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { isAcceptingTickets } from "@/lib/plans";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,8 +15,9 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     }
     const tenantCode = params.tenantCode.toUpperCase();
 
-    const tenant = await db.query("SELECT 1 FROM users WHERE tenant_code = $1", [tenantCode]);
-    if (!tenant.rowCount) {
+    // Only whether booking is open is exposed, not the plan or its limits.
+    const acceptingTickets = await isAcceptingTickets(tenantCode);
+    if (acceptingTickets === null) {
       return NextResponse.json({ error: "Booking link not found." }, { status: 404 });
     }
 
@@ -29,7 +31,11 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
         [tenantCode],
       ),
     ]);
-    return NextResponse.json({ branches: branches.rows, services: services.rows });
+    return NextResponse.json({
+      branches: branches.rows,
+      services: services.rows,
+      accepting_tickets: acceptingTickets,
+    });
   } catch (error) {
     console.error("Booking options retrieval failed:", error);
     return NextResponse.json({ error: "Unable to load booking options." }, { status: 500 });

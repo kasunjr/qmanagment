@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { consumeDailyTicket } from "@/lib/plans";
 import { createTicket, validateTicketFields } from "@/lib/tickets";
 
 export const runtime = "nodejs";
@@ -23,9 +25,32 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const validation = validateTicketFields(body);
     if ("error" in validation) return NextResponse.json({ error: validation.error }, { status: 400 });
 
-    const ticket = await createTicket(params.tenantCode.toUpperCase(), validation.fields);
-    if (!ticket) return NextResponse.json({ error: "Branch or service not found." }, { status: 404 });
-    return NextResponse.json({ ticket }, { status: 201 });
+    // The ticket and its count against the plan's daily limit are saved together. Rolling back
+    // also returns the branch ticket number and cancels the staff notification for the ticket.
+    const tenantCode = params.tenantCode.toUpperCase();
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      const ticket = await createTicket(tenantCode, validation.fields, undefined, client);
+      if (!ticket) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({ error: "Branch or service not found." }, { status: 404 });
+      }
+      if (!(await consumeDailyTicket(client, tenantCode))) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: "No more tickets are available today. Please try again tomorrow.", code: "daily_ticket_limit" },
+          { status: 429 },
+        );
+      }
+      await client.query("COMMIT");
+      return NextResponse.json({ ticket }, { status: 201 });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     console.error("Ticket creation failed:", error);
     return NextResponse.json({ error: "Unable to create ticket." }, { status: 500 });
