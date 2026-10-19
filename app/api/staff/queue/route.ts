@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateStaffRequest } from "@/lib/staff-auth";
 import { db } from "@/lib/db";
+import { isAcceptingTickets } from "@/lib/plans";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,9 +25,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Staff authentication required." }, { status: 401 });
     }
     if (!staffUser.queue_id) {
-      return NextResponse.json({ queue: null, tickets: [] });
+      return NextResponse.json({ queue: null, tickets: [], daily_limit_reached: false });
     }
 
+    // Staff only learn whether customers can still book today, not the plan or its numbers.
+    const dailyLimitReached = (await isAcceptingTickets(staffUser.tenant_code)) === false;
     const result = await db.query<AssignedQueueTicketRow>(
       `SELECT q.id AS queue_id, q.name AS queue_name, b.name AS branch_name,
               t.id AS ticket_id, t.ticket_number, t.customer_name,
@@ -46,7 +49,7 @@ export async function GET(request: NextRequest) {
       [staffUser.id, staffUser.tenant_code, staffUser.queue_id],
     );
     const queueRow = result.rows[0];
-    if (!queueRow) return NextResponse.json({ queue: null, tickets: [] });
+    if (!queueRow) return NextResponse.json({ queue: null, tickets: [], daily_limit_reached: false });
 
     const tickets = result.rows.flatMap((row) => row.ticket_id ? [{
       id: row.ticket_id,
@@ -63,6 +66,7 @@ export async function GET(request: NextRequest) {
         branch_name: queueRow.branch_name,
       },
       tickets,
+      daily_limit_reached: dailyLimitReached,
     });
   } catch (error) {
     console.error("Staff queue retrieval failed:", error);
