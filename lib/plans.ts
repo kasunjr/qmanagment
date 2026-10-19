@@ -45,11 +45,20 @@ export interface PlanUsage {
   tickets_today: number;
 }
 
+// The plan the tenant subscribed to, which differs from the plan in effect once it has expired.
+export interface TenantSubscription {
+  plan_code: string;
+  plan_name: string;
+  expires_at: string | null;
+  expired: boolean;
+}
+
 export interface TenantUsage {
   plan_code: string;
   plan_name: string;
   limits: PlanLimits;
   usage: PlanUsage;
+  subscription: TenantSubscription;
 }
 
 export interface PlanRecord {
@@ -122,9 +131,13 @@ export async function getTenantUsage(tenantCode: string, client: Queryable = db)
     queues: number;
     staff_users: number;
     tickets_today: number;
+    subscribed_plan_code: string;
+    subscribed_plan_name: string;
+    expires_at: Date | null;
   }>(
     `SELECT p.code AS plan_code, p.name AS plan_name,
             p.max_branches, p.max_services, p.max_queues, p.max_staff_users, p.max_tickets_per_day,
+            sp.code AS subscribed_plan_code, sp.name AS subscribed_plan_name, ts.expires_at,
             (SELECT COUNT(*)::int FROM branches WHERE tenant_code = ts.tenant_code) AS branches,
             (SELECT COUNT(*)::int FROM services WHERE tenant_code = ts.tenant_code) AS services,
             (SELECT COUNT(*)::int FROM queues WHERE tenant_code = ts.tenant_code) AS queues,
@@ -132,6 +145,7 @@ export async function getTenantUsage(tenantCode: string, client: Queryable = db)
             COALESCE((SELECT tickets_created FROM tenant_daily_usage
                       WHERE tenant_code = ts.tenant_code AND usage_date = CURRENT_DATE), 0) AS tickets_today
      FROM ${tenantPlan}
+     JOIN plans sp ON sp.code = ts.plan_code
      WHERE ts.tenant_code = $1`,
     [tenantCode],
   );
@@ -154,6 +168,12 @@ export async function getTenantUsage(tenantCode: string, client: Queryable = db)
       queues: row.queues,
       staff_users: row.staff_users,
       tickets_today: row.tickets_today,
+    },
+    subscription: {
+      plan_code: row.subscribed_plan_code,
+      plan_name: row.subscribed_plan_name,
+      expires_at: row.expires_at?.toISOString() ?? null,
+      expired: row.subscribed_plan_code !== row.plan_code,
     },
   };
 }
