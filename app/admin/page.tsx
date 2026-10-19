@@ -22,6 +22,7 @@ import {
   Users,
   Ticket,
   ArrowUpRight,
+  AlertTriangle,
 } from "lucide-react";
 
 interface Branch {
@@ -84,6 +85,38 @@ const usageStyles: Record<UsageLevel, { value: string; bar: string; card: string
   full: { value: "text-red-600", bar: "bg-red-500", card: "border-red-200" },
 };
 
+function PlanExpiredBanner({ subscription, planName }: {
+  subscription: TenantUsage["subscription"];
+  planName: string;
+}) {
+  const expiredOn = subscription.expires_at
+    ? new Date(subscription.expires_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+    : null;
+
+  return (
+    <div className="mb-3 flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+      <div className="flex gap-2">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        <div className="text-sm text-amber-900">
+          <p className="font-semibold">
+            Your {subscription.plan_name} plan {expiredOn ? `expired on ${expiredOn}` : "has expired"}.
+          </p>
+          <p className="mt-0.5 text-amber-800">
+            Your account is now on the {planName} plan and its limits apply. Existing branches, queues and staff
+            are kept, but you can&apos;t add more until you renew.
+          </p>
+        </div>
+      </div>
+      <Link
+        href="/pricing"
+        className="flex shrink-0 items-center gap-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700"
+      >
+        Renew plan <ArrowUpRight className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  );
+}
+
 function PlanUsageStrip({ planUsage }: { planUsage: TenantUsage }) {
   const { limits, usage } = planUsage;
   const items = [
@@ -96,6 +129,9 @@ function PlanUsageStrip({ planUsage }: { planUsage: TenantUsage }) {
 
   return (
     <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+      {planUsage.subscription.expired && (
+        <PlanExpiredBanner subscription={planUsage.subscription} planName={planUsage.plan_name} />
+      )}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-slate-800">Plan &amp; usage</h2>
