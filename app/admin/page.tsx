@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import type { TenantUsage } from "@/lib/plans";
 import {
   Download,
   Plus,
@@ -14,6 +16,12 @@ import {
   QrCode,
   Settings,
   BarChart3,
+  Building2,
+  ClipboardList,
+  Layers,
+  Users,
+  Ticket,
+  ArrowUpRight,
 } from "lucide-react";
 
 interface Branch {
@@ -60,6 +68,83 @@ function formatWaitDuration(minutes: number | null): string {
   return hours ? `${hours}h ${remainingMinutes}m` : `${remainingMinutes} min`;
 }
 
+type UsageLevel = "ok" | "near" | "full";
+
+// "near" from 80% of the limit, "full" at or over it; a null limit is unlimited.
+function usageLevel(used: number, limit: number | null): UsageLevel {
+  if (limit === null) return "ok";
+  if (used >= limit) return "full";
+  if (used >= limit * 0.8) return "near";
+  return "ok";
+}
+
+const usageStyles: Record<UsageLevel, { value: string; bar: string; card: string }> = {
+  ok: { value: "text-slate-900", bar: "bg-indigo-500", card: "border-slate-200" },
+  near: { value: "text-amber-600", bar: "bg-amber-500", card: "border-amber-200" },
+  full: { value: "text-red-600", bar: "bg-red-500", card: "border-red-200" },
+};
+
+function PlanUsageStrip({ planUsage }: { planUsage: TenantUsage }) {
+  const { limits, usage } = planUsage;
+  const items = [
+    { label: "Branches", icon: Building2, used: usage.branches, limit: limits.branches },
+    { label: "Services", icon: ClipboardList, used: usage.services, limit: limits.services },
+    { label: "Queues", icon: Layers, used: usage.queues, limit: limits.queues },
+    { label: "Staff", icon: Users, used: usage.staff_users, limit: limits.staff_users },
+    { label: "Tickets today", icon: Ticket, used: usage.tickets_today, limit: limits.tickets_per_day },
+  ];
+
+  return (
+    <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-slate-800">Plan &amp; usage</h2>
+          <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+            {planUsage.plan_name}
+          </span>
+        </div>
+        <Link
+          href="/pricing"
+          className="flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-50"
+        >
+          Upgrade plan <ArrowUpRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {items.map(({ label, icon: Icon, used, limit }) => {
+          const level = usageLevel(used, limit);
+          const styles = usageStyles[level];
+          const percent = limit === null ? 0 : limit === 0 ? 100 : Math.min(100, (used / limit) * 100);
+          return (
+            <div key={label} className={`rounded-lg border p-3 ${styles.card}`}>
+              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                <Icon className="h-3.5 w-3.5" /> {label}
+              </div>
+              <p className="mt-1 text-lg font-bold leading-tight">
+                <span className={styles.value}>{used}</span>
+                <span className="text-sm font-medium text-slate-400">
+                  {limit === null ? " · Unlimited" : ` / ${limit}`}
+                </span>
+              </p>
+              {limit !== null && (
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <div className={`h-full rounded-full ${styles.bar}`} style={{ width: `${percent}%` }} />
+                </div>
+              )}
+              {level === "full" && (
+                <p className="mt-1.5 text-xs font-medium text-red-600">
+                  {used > (limit ?? 0) ? "Over limit" : "Limit reached"}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function AdminDashboard() {
   const { user, accessToken } = useAuth();
   const [activeTab, setActiveTab] = useState<"qr" | "config" | "analytics">(
@@ -76,6 +161,45 @@ function AdminDashboard() {
     setStaffUrl(`http://localhost:3000/${user.tenant_code}/staff`);
     setCustomerUrl(`http://localhost:3000/${user.tenant_code}/customer`);
   }, [user?.tenant_code]);
+
+  // The tenant's plan, its limits and current usage; null until loaded or if loading fails.
+  const [planUsage, setPlanUsage] = useState<TenantUsage | null>(null);
+
+  // Called on load and again after anything that changes a count, so the strip stays current.
+  const loadUsage = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!accessToken) return;
+      try {
+        const response = await fetch("/api/usage", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
+          signal,
+        });
+        const result = (await response.json().catch(() => null)) as TenantUsage | null;
+        if (response.ok && result) setPlanUsage(result);
+      } catch {
+        // Without usage data the dashboard works as before.
+      }
+    },
+    [accessToken],
+  );
+
+  // Tickets today changes as customers book, so usage is refreshed every 30s while the tab is visible.
+  useEffect(() => {
+    const controller = new AbortController();
+    const refresh = () => {
+      if (document.visibilityState === "visible") void loadUsage(controller.signal);
+    };
+
+    void loadUsage(controller.signal);
+    const interval = window.setInterval(refresh, 30_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [loadUsage]);
 
   const staffQrRef = useRef<SVGSVGElement>(null);
   const customerQrRef = useRef<SVGSVGElement>(null);
@@ -311,6 +435,7 @@ function AdminDashboard() {
 
       setBranches((currentBranches) => [result.branch!, ...currentBranches]);
       setBranchForm({ name: "", code: "" });
+      void loadUsage();
     } catch (error) {
       setBranchError(
         error instanceof Error ? error.message : "Unable to create branch.",
@@ -380,6 +505,7 @@ function AdminDashboard() {
       setBranches((currentBranches) =>
         currentBranches.filter((item) => item.id !== branch.id),
       );
+      void loadUsage();
     } catch (error) {
       setBranchError(
         error instanceof Error ? error.message : "Unable to delete branch.",
@@ -461,7 +587,10 @@ function AdminDashboard() {
           : [result.service!, ...currentServices],
       );
       if (serviceId) setEditingServiceId(null);
-      else setServiceForm({ name: "", duration: "15" });
+      else {
+        setServiceForm({ name: "", duration: "15" });
+        void loadUsage();
+      }
     } catch (error) {
       setServiceError(
         error instanceof Error ? error.message : "Unable to save service.",
@@ -487,6 +616,7 @@ function AdminDashboard() {
       setServices((currentServices) =>
         currentServices.filter((item) => item.id !== service.id),
       );
+      void loadUsage();
     } catch (error) {
       setServiceError(
         error instanceof Error ? error.message : "Unable to delete service.",
@@ -559,6 +689,7 @@ function AdminDashboard() {
 
       setQueues((currentQueues) => [...currentQueues, result.queue!]);
       setQueueName("");
+      void loadUsage();
     } catch (error) {
       setQueueError(
         error instanceof Error ? error.message : "Unable to create queue.",
@@ -584,6 +715,7 @@ function AdminDashboard() {
       setQueues((currentQueues) =>
         currentQueues.filter((item) => item.id !== queue.id),
       );
+      void loadUsage();
     } catch (error) {
       setQueueError(
         error instanceof Error ? error.message : "Unable to delete queue.",
@@ -731,6 +863,7 @@ function AdminDashboard() {
       );
       setIsStaffModalOpen(false);
       resetStaffForm();
+      if (!editingStaffId) void loadUsage();
     } catch (error) {
       setStaffError(
         error instanceof Error ? error.message : "Unable to save staff user.",
@@ -756,6 +889,7 @@ function AdminDashboard() {
       setStaff((currentStaff) =>
         currentStaff.filter((item) => item.id !== staffUser.id),
       );
+      void loadUsage();
     } catch (error) {
       setStaffError(
         error instanceof Error ? error.message : "Unable to delete staff user.",
@@ -767,6 +901,7 @@ function AdminDashboard() {
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
         <h1 className="text-2xl font-bold text-slate-800 mb-4">Admin Portal</h1>
+        {planUsage && <PlanUsageStrip planUsage={planUsage} />}
         <div className="flex space-x-2 border-b border-slate-200">
           <button
             onClick={() => setActiveTab("qr")}

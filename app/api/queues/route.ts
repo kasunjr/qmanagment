@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { PlanLimitError, planLimitResponse, withPlanLimit } from "@/lib/plans";
 import { queueColumns, validateQueueFields, type QueueRecord } from "@/lib/queues";
 import { isUniqueViolation, isUuid } from "@/lib/staff-users";
 
@@ -49,18 +50,20 @@ export async function POST(request: NextRequest) {
     if ("error" in validation) return NextResponse.json({ error: validation.error }, { status: 400 });
 
     // Selecting from branches ensures the branch belongs to this tenant.
+    // The queue limit counts all of the tenant's queues, default queues included.
     const { name, branch_id } = validation.fields;
-    const result = await db.query<QueueRecord>(
+    const result = await withPlanLimit(user.tenant_code, "queues", (client) => client.query<QueueRecord>(
       `INSERT INTO queues AS q (tenant_code, branch_id, name)
        SELECT b.tenant_code, b.id, $3 FROM branches b
        WHERE b.id = $2 AND b.tenant_code = $1
        RETURNING ${queueColumns}`,
       [user.tenant_code, branch_id, name],
-    );
+    ));
     const queue = result.rows[0];
     if (!queue) return NextResponse.json({ error: "Branch not found." }, { status: 404 });
     return NextResponse.json({ queue }, { status: 201 });
   } catch (error) {
+    if (error instanceof PlanLimitError) return planLimitResponse(error);
     if (isUniqueViolation(error)) {
       return NextResponse.json({ error: "Queue name is already used in this branch." }, { status: 409 });
     }
