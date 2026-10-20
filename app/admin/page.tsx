@@ -18,13 +18,10 @@ import {
   Settings,
   BarChart3,
   Palette,
-  Building2,
-  ClipboardList,
-  Layers,
-  Users,
-  Ticket,
   ArrowUpRight,
   AlertTriangle,
+  Clock,
+  Ticket,
 } from "lucide-react";
 
 interface Branch {
@@ -71,73 +68,115 @@ function formatWaitDuration(minutes: number | null): string {
   return hours ? `${hours}h ${remainingMinutes}m` : `${remainingMinutes} min`;
 }
 
-type UsageLevel = "ok" | "near" | "full";
+// Mirrors DEFAULT_PLAN_CODE in lib/plans.ts, which can't be imported here as it pulls in the DB client.
+const BASIC_PLAN_CODE = "basic";
+const EXPIRY_WARNING_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-// "near" from 80% of the limit, "full" at or over it; a null limit is unlimited.
-function usageLevel(used: number, limit: number | null): UsageLevel {
-  if (limit === null) return "ok";
-  if (used >= limit) return "full";
-  if (used >= limit * 0.8) return "near";
-  return "ok";
+function formatPlanDate(date: Date): string {
+  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
-const usageStyles: Record<UsageLevel, { value: string; bar: string; card: string }> = {
-  ok: { value: "text-slate-900", bar: "bg-indigo-500", card: "border-slate-200" },
-  near: { value: "text-amber-600", bar: "bg-amber-500", card: "border-amber-200" },
-  full: { value: "text-red-600", bar: "bg-red-500", card: "border-red-200" },
-};
+// Whole calendar days from today to the given date: 0 is today, 1 is tomorrow.
+function calendarDaysUntil(date: Date): number {
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.round((startOfDay(date) - startOfDay(new Date())) / DAY_MS);
+}
+
+function PricingLink({ label, className }: { label: string; className: string }) {
+  return (
+    <Link
+      href="/pricing"
+      className={`flex shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition ${className}`}
+    >
+      {label} <ArrowUpRight className="h-3.5 w-3.5" />
+    </Link>
+  );
+}
 
 function PlanExpiredBanner({ subscription, planName }: {
   subscription: TenantUsage["subscription"];
   planName: string;
 }) {
-  const expiredOn = subscription.expires_at
-    ? new Date(subscription.expires_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
-    : null;
+  const expiresAt = subscription.expires_at ? new Date(subscription.expires_at) : null;
+  // A subscription cancelled before its end date counts as expired too, but has no past date to show.
+  const ended = expiresAt && expiresAt.getTime() <= Date.now()
+    ? `expired on ${formatPlanDate(expiresAt)}`
+    : "has ended";
 
   return (
-    <div className="mb-3 flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+    <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3">
       <div className="flex gap-2">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-        <div className="text-sm text-amber-900">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+        <div className="text-sm text-red-900">
           <p className="font-semibold">
-            Your {subscription.plan_name} plan {expiredOn ? `expired on ${expiredOn}` : "has expired"}.
+            Your {subscription.plan_name} plan {ended}.
           </p>
-          <p className="mt-0.5 text-amber-800">
+          <p className="mt-0.5 text-red-800">
             Your account is now on the {planName} plan and its limits apply. Existing branches, queues and staff
             are kept, but you can&apos;t add more until you renew.
           </p>
         </div>
       </div>
-      <Link
-        href="/pricing"
-        className="flex shrink-0 items-center gap-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700"
-      >
-        Renew plan <ArrowUpRight className="h-3.5 w-3.5" />
-      </Link>
+      <PricingLink label="Renew plan" className="bg-red-600 hover:bg-red-700" />
     </div>
   );
 }
 
-function PlanUsageStrip({ planUsage }: { planUsage: TenantUsage }) {
-  const { limits, usage } = planUsage;
-  const items = [
-    { label: "Branches", icon: Building2, used: usage.branches, limit: limits.branches },
-    { label: "Services", icon: ClipboardList, used: usage.services, limit: limits.services },
-    { label: "Queues", icon: Layers, used: usage.queues, limit: limits.queues },
-    { label: "Staff", icon: Users, used: usage.staff_users, limit: limits.staff_users },
-    { label: "Tickets today", icon: Ticket, used: usage.tickets_today, limit: limits.tickets_per_day },
-  ];
+function PlanExpiringNotice({ subscription }: { subscription: TenantUsage["subscription"] }) {
+  if (subscription.expired || subscription.plan_code === BASIC_PLAN_CODE || !subscription.expires_at) return null;
+
+  const expiresAt = new Date(subscription.expires_at);
+  const daysLeft = calendarDaysUntil(expiresAt);
+  if (daysLeft < 0 || daysLeft > EXPIRY_WARNING_DAYS) return null;
+
+  const when = daysLeft === 0 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${daysLeft} days`;
 
   return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+      <div className="flex items-center gap-2 text-sm text-amber-900">
+        <Clock className="h-4 w-4 shrink-0 text-amber-600" />
+        <p>
+          Your <span className="font-semibold">{subscription.plan_name}</span> plan expires {when} (
+          {formatPlanDate(expiresAt)}). Renew to keep its limits.
+        </p>
+      </div>
+      <PricingLink label="Renew plan" className="bg-amber-600 hover:bg-amber-700" />
+    </div>
+  );
+}
+
+function DailyTicketLimitBanner({ planUsage }: { planUsage: TenantUsage }) {
+  const limit = planUsage.limits.tickets_per_day;
+  const used = planUsage.usage.tickets_today;
+  if (limit === null || used < limit) return null;
+
+  return (
+    <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3">
+      <div className="flex gap-2">
+        <Ticket className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+        <div className="text-sm text-red-900">
+          <p className="font-semibold">
+            Daily ticket limit reached ({used}/{limit}).
+          </p>
+          <p className="mt-0.5 text-red-800">
+            Customers can&apos;t book new tickets until tomorrow. Tickets already issued can still be served.
+            Upgrade your plan for a higher limit.
+          </p>
+        </div>
+      </div>
+      <PricingLink label="Upgrade plan" className="bg-red-600 hover:bg-red-700" />
+    </div>
+  );
+}
+
+function CurrentPlan({ planUsage }: { planUsage: TenantUsage }) {
+  return (
     <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
-      {planUsage.subscription.expired && (
-        <PlanExpiredBanner subscription={planUsage.subscription} planName={planUsage.plan_name} />
-      )}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-slate-800">Plan &amp; usage</h2>
-          <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+          <h2 className="text-sm font-semibold text-slate-800">Current plan</h2>
+          <span className="rounded-full bg-indigo-100 px-3 py-1 text-sm font-semibold text-indigo-700">
             {planUsage.plan_name}
           </span>
         </div>
@@ -148,37 +187,12 @@ function PlanUsageStrip({ planUsage }: { planUsage: TenantUsage }) {
           Upgrade plan <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
       </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {items.map(({ label, icon: Icon, used, limit }) => {
-          const level = usageLevel(used, limit);
-          const styles = usageStyles[level];
-          const percent = limit === null ? 0 : limit === 0 ? 100 : Math.min(100, (used / limit) * 100);
-          return (
-            <div key={label} className={`rounded-lg border p-3 ${styles.card}`}>
-              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-                <Icon className="h-3.5 w-3.5" /> {label}
-              </div>
-              <p className="mt-1 text-lg font-bold leading-tight">
-                <span className={styles.value}>{used}</span>
-                <span className="text-sm font-medium text-slate-400">
-                  {limit === null ? " · Unlimited" : ` / ${limit}`}
-                </span>
-              </p>
-              {limit !== null && (
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                  <div className={`h-full rounded-full ${styles.bar}`} style={{ width: `${percent}%` }} />
-                </div>
-              )}
-              {level === "full" && (
-                <p className="mt-1.5 text-xs font-medium text-red-600">
-                  {used > (limit ?? 0) ? "Over limit" : "Limit reached"}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {planUsage.subscription.expired ? (
+        <PlanExpiredBanner subscription={planUsage.subscription} planName={planUsage.plan_name} />
+      ) : (
+        <PlanExpiringNotice subscription={planUsage.subscription} />
+      )}
+      <DailyTicketLimitBanner planUsage={planUsage} />
     </section>
   );
 }
@@ -939,7 +953,7 @@ function AdminDashboard() {
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
         <h1 className="text-2xl font-bold text-slate-800 mb-4">Admin Portal</h1>
-        {planUsage && <PlanUsageStrip planUsage={planUsage} />}
+        {planUsage && <CurrentPlan planUsage={planUsage} />}
         <div className="flex space-x-2 border-b border-slate-200">
           <button
             onClick={() => setActiveTab("qr")}
