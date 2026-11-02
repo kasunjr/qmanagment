@@ -30,6 +30,10 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'
 
 Run the command twice. Put one value in `JWT_ACCESS_SECRET` and the other in `JWT_STAFF_ACCESS_SECRET`. Set `DATABASE_URL` to your PostgreSQL connection string, and keep `AUTH_REFRESH_COOKIE_SECURE=false` for local HTTP development. Use HTTPS and secure cookies in production. Do not commit `.env.local`.
 
+Signup requires a six-digit email verification code before a session is created; unverified accounts cannot sign in. A welcome email is sent after the signup email is verified. Login also uses a six-digit email code after password verification. For test email delivery, create a dedicated Gmail account, enable 2-Step Verification, and create an App Password. Set `GMAIL_USER`, `GMAIL_APP_PASSWORD`, and optionally `GMAIL_FROM` in `.env.local` and in the Vercel project's Environment Variables. Do not commit or share the App Password. Codes expire after 10 minutes, are single-use, and can be resent once per minute.
+
+The admin Profile tab supports editing the account name, changing the email address with verification, changing the password, and saving two-step verification and account-update notification preferences. Two-step verification is off by default for new accounts and can be enabled in Profile settings; disabling it requires the current password. Changing the password revokes sessions and requires signing in again. The notification preference is stored for future use; account-update emails are not currently sent.
+
 Apply database migrations, then start the app:
 
 ```bash

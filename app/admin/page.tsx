@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import AdminProfile from "@/components/AdminProfile";
 import ThemeCustomization from "@/components/ThemeCustomization";
 import type { TenantUsage } from "@/lib/plans";
 import {
@@ -22,6 +23,7 @@ import {
   AlertTriangle,
   Clock,
   Ticket,
+  UserRound,
 } from "lucide-react";
 
 interface Branch {
@@ -198,8 +200,8 @@ function CurrentPlan({ planUsage }: { planUsage: TenantUsage }) {
 }
 
 function AdminDashboard() {
-  const { user, accessToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<"qr" | "config" | "analytics" | "customization">(
+  const { user, accessToken, acceptSession, signOut } = useAuth();
+  const [activeTab, setActiveTab] = useState<"qr" | "config" | "analytics" | "customization" | "profile">(
     "qr",
   );
 
@@ -995,10 +997,28 @@ function AdminDashboard() {
           >
             <Palette className="w-4 h-4" /> Customization
           </button>
+          <button
+            onClick={() => setActiveTab("profile")}
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-all ${
+              activeTab === "profile"
+                ? "border-indigo-600 text-indigo-600 bg-white rounded-t-lg"
+                : "border-transparent text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <UserRound className="w-4 h-4" /> Profile
+          </button>
         </div>
       </div>
 
       <div className="p-6">
+        {activeTab === "profile" && (
+          <AdminProfile
+            user={user}
+            accessToken={accessToken}
+            acceptSession={acceptSession}
+            signOut={signOut}
+          />
+        )}
         {activeTab === "customization" && <ThemeCustomization accessToken={accessToken!} />}
         {activeTab === "qr" && (
           <div className="grid md:grid-cols-2 gap-8">

@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import type { NextRequest, NextResponse } from "next/server";
@@ -35,6 +35,14 @@ function equalHash(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left, "hex");
   const rightBuffer = Buffer.from(right, "hex");
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+export function hashLoginCode(challengeId: string, code: string): string {
+  return createHmac("sha256", accessSecret()).update(`${challengeId}:${code}`).digest("hex");
+}
+
+export function verifyLoginCode(challengeId: string, code: string, storedHash: string): boolean {
+  return equalHash(storedHash, hashLoginCode(challengeId, code));
 }
 
 export function refreshCookieName(): string {
@@ -119,7 +127,9 @@ export async function rotateRefreshToken(token: string): Promise<{ user: AuthUse
       `SELECT rt.id, rt.family_id, rt.user_id, rt.token_hash, rt.expires_at, rt.revoked_at,
               u.email, u.role, u.tenant_code
        FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id
-       WHERE rt.id = $1 FOR UPDATE OF rt`,
+       WHERE rt.id = $1 AND u.email_verified_at IS NOT NULL
+         AND (u.password_changed_at IS NULL OR rt.created_at > u.password_changed_at)
+       FOR UPDATE OF rt`,
       [tokenId],
     );
     const row = result.rows[0];
@@ -190,10 +200,14 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthUse
       audience: JWT_AUDIENCE,
       algorithms: ["HS256"],
     });
-    if (!payload.sub) return null;
+    if (!payload.sub || typeof payload.iat !== "number") return null;
     const result = await db.query<AuthUser>(
-      "SELECT id, email, role, tenant_code FROM users WHERE id = $1",
-      [payload.sub],
+      `SELECT id, email, role, tenant_code
+       FROM users
+       WHERE id = $1
+         AND email_verified_at IS NOT NULL
+         AND (password_changed_at IS NULL OR password_changed_at <= to_timestamp($2))`,
+      [payload.sub, payload.iat],
     );
     return result.rows[0] ?? null;
   } catch {

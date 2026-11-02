@@ -1,0 +1,2 @@
+ALTER TABLE users
+    ALTER COLUMN two_step_enabled SET DEFAULT FALSE;

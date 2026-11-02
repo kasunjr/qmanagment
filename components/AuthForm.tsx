@@ -17,8 +17,13 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const { user, acceptSession, isLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [challengeId, setChallengeId] = useState("");
+  const [verificationType, setVerificationType] = useState<"login" | "signup" | null>(null);
+  const [loginStep, setLoginStep] = useState<"password" | "code">("password");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const isSignup = mode === "signup";
 
   useEffect(() => {
@@ -31,13 +36,28 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/auth/${mode}`, {
+      const isCodeStep = loginStep === "code";
+      const codePurpose = verificationType ?? mode;
+      const endpoint = isCodeStep
+        ? `/api/auth/${codePurpose}/verify`
+        : `/api/auth/${mode}`;
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(isCodeStep ? { challengeId, code: verificationCode } : { email, password }),
       });
       const result = await response.json();
+      if (result.requiresVerification && typeof result.challengeId === "string") {
+        setChallengeId(result.challengeId);
+        setVerificationType(result.verificationType === "signup" ? "signup" : "login");
+        setLoginStep("code");
+        setVerificationCode("");
+        if (!response.ok) {
+          setError(result.error ?? "The verification email could not be sent.");
+        }
+        return;
+      }
       if (!response.ok) {
         setError(result.error ?? "Authentication failed. Please try again.");
         return;
@@ -53,6 +73,32 @@ export default function AuthForm({ mode }: AuthFormProps) {
       setError("Unable to reach the server. Check your connection and try again.");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleResendCode() {
+    setError("");
+    setIsResending(true);
+
+    try {
+      const response = await fetch(`/api/auth/${verificationType ?? mode}/resend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ challengeId }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        if (typeof result.challengeId === "string") setChallengeId(result.challengeId);
+        setError(result.error ?? "Unable to send another code.");
+        return;
+      }
+      setChallengeId(result.challengeId);
+      setVerificationCode("");
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+    } finally {
+      setIsResending(false);
     }
   }
 
@@ -85,50 +131,109 @@ export default function AuthForm({ mode }: AuthFormProps) {
         <div className="mb-7 flex h-11 w-11 items-center justify-center bg-emerald-50 text-emerald-700">
           <KeyRound aria-hidden="true" className="h-5 w-5" />
         </div>
-        <h2 className="text-2xl font-bold text-slate-900">{isSignup ? "Create account" : "Welcome back"}</h2>
+        <h2 className="text-2xl font-bold text-slate-900">{isSignup ? "Create account" : "Sign in"}</h2>
         <p className="mt-2 text-sm text-slate-600">
-          {isSignup ? "Use your email to create an account." : "Sign in to continue to the admin dashboard."}
+          {isSignup
+            ? loginStep === "code"
+              ? `Enter the 6-digit code sent to ${email} to verify your email.`
+              : "Use your email to create an account."
+            : loginStep === "code" && verificationType === "signup"
+              ? `Enter the 6-digit code sent to ${email} to verify your email.`
+              : loginStep === "code"
+              ? `Enter the 6-digit code sent to ${email} to finish signing in.`
+              : "Sign in to continue to the admin dashboard."}
         </p>
 
         <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">Email address</label>
-            <input
-              autoComplete="email"
-              className="w-full border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
-              id="email"
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              type="email"
-              value={email}
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
-            <input
-              autoComplete={isSignup ? "new-password" : "current-password"}
-              className="w-full border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
-              id="password"
-              minLength={isSignup ? 12 : undefined}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
-            {isSignup && <p className="mt-1.5 text-xs text-slate-500">Use at least 12 characters.</p>}
-          </div>
+          {loginStep === "code" ? (
+            <div>
+              <label htmlFor="verification-code" className="mb-1.5 block text-sm font-medium text-slate-700">Email verification code</label>
+              <input
+                autoComplete="one-time-code"
+                className="w-full border border-slate-300 px-3 py-2.5 text-sm tracking-[0.3em] outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                id="verification-code"
+                inputMode="numeric"
+                maxLength={6}
+                onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                pattern="[0-9]{6}"
+                required
+                type="text"
+                value={verificationCode}
+              />
+            </div>
+          ) : (
+            <>
+              <div>
+                <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">Email address</label>
+                <input
+                  autoComplete="email"
+                  className="w-full border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                  id="email"
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  type="email"
+                  value={email}
+                />
+              </div>
+              <div>
+                <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
+                <input
+                  autoComplete={isSignup ? "new-password" : "current-password"}
+                  className="w-full border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                  id="password"
+                  minLength={isSignup ? 12 : undefined}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  type="password"
+                  value={password}
+                />
+                {isSignup && <p className="mt-1.5 text-xs text-slate-500">Use at least 12 characters.</p>}
+              </div>
+            </>
+          )}
 
           {error && <p aria-live="polite" className="border-l-2 border-rose-600 bg-rose-50 px-3 py-2 text-sm text-rose-800">{error}</p>}
 
           <button
             className="flex w-full items-center justify-center gap-2 bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isResending}
             type="submit"
           >
-            {isSubmitting ? "Please wait..." : isSignup ? "Create account" : "Sign in"}
+            {isSubmitting
+              ? "Please wait..."
+              : loginStep === "code" && verificationType === "signup"
+                ? "Verify email"
+                : !isSignup && loginStep === "code"
+                ? "Verify and sign in"
+                : isSignup ? "Create account" : "Continue"}
             {!isSubmitting && <ArrowRight aria-hidden="true" className="h-4 w-4" />}
           </button>
         </form>
+
+        {loginStep === "code" && (
+          <div className="mt-4 flex items-center justify-between text-sm">
+            <button
+              className="font-semibold text-emerald-700 hover:text-emerald-800 disabled:opacity-60"
+              disabled={isResending || isSubmitting}
+              onClick={() => void handleResendCode()}
+              type="button"
+            >
+              {isResending ? "Sending..." : "Resend code"}
+            </button>
+            {!isSignup && verificationType !== "signup" && (
+              <button
+                className="text-slate-600 hover:text-slate-900"
+                onClick={() => {
+                  setError("");
+                  setLoginStep("password");
+                }}
+                type="button"
+              >
+                Back
+              </button>
+            )}
+          </div>
+        )}
 
         <p className="mt-6 text-sm text-slate-600">
           {isSignup ? "Already have an account? " : "New to Queue? "}
