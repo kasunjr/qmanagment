@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Ticket, Clock, CheckCircle2 } from "lucide-react";
+import { DEFAULT_APP_THEME, themeStyle, type AppTheme } from "@/lib/theme-style";
 
 interface Branch {
   id: string;
@@ -32,6 +33,7 @@ export default function CustomerPage({
   params: { tenantCode: string };
 }) {
   const tenantCode = params.tenantCode.toUpperCase();
+  const [theme, setTheme] = useState<AppTheme>(DEFAULT_APP_THEME);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +46,29 @@ export default function CustomerPage({
   const [ticket, setTicket] = useState<QueueTicket | null>(null);
   const [isBooking, setIsBooking] = useState(false);
   const [bookError, setBookError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/public/${tenantCode}/theme`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const result = (await response.json().catch(() => null)) as { theme?: AppTheme } | null;
+        if (response.ok && result?.theme) setTheme(result.theme);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [tenantCode]);
+
+  useEffect(() => {
+    document.body.style.backgroundColor = theme.background_color;
+    document.body.style.color = theme.text_color;
+    return () => {
+      document.body.style.backgroundColor = "";
+      document.body.style.color = "";
+    };
+  }, [theme]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -186,17 +211,25 @@ export default function CustomerPage({
   };
 
   return (
-    <div className="max-w-lg mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-      <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
-        <Ticket className="w-8 h-8 text-indigo-600" />
+    <div
+      className="mx-auto max-w-lg rounded-theme-lg border border-theme-text/10 bg-theme-surface p-6 shadow-sm"
+      style={themeStyle(theme)}
+    >
+      <div className="mb-6 flex items-center gap-3 border-b border-theme-text/10 pb-4">
+        {theme.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img alt="" className="h-9 w-9 shrink-0 rounded-theme object-contain" src={theme.logo_url} />
+        ) : (
+          <Ticket className="h-8 w-8 shrink-0 text-theme-primary" />
+        )}
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Customer Queue Portal</h1>
-          <p className="text-sm text-slate-500">Get a digital queue ticket instantly</p>
+          <h1 className="text-2xl font-bold text-theme-text">Customer Queue Portal</h1>
+          <p className="text-sm text-theme-text/60">Get a digital queue ticket instantly</p>
         </div>
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-slate-500">Loading booking options...</p>
+        <p className="text-sm text-theme-text/60">Loading booking options...</p>
       ) : loadError ? (
         <p className="text-sm text-red-500" role="alert">{loadError}</p>
       ) : branches.length === 0 || services.length === 0 ? (
@@ -209,19 +242,19 @@ export default function CustomerPage({
       ) : !ticket ? (
         <form onSubmit={handleBook} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Your Full Name</label>
+            <label className="mb-1 block text-sm font-medium text-theme-text/80">Your Full Name</label>
             <input
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. John Doe"
-              className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-theme border border-theme-text/20 bg-theme-surface p-2.5 text-sm text-theme-text placeholder:text-theme-text/40 focus:border-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary/30"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Select Branch</label>
+            <label className="mb-1 block text-sm font-medium text-theme-text/80">Select Branch</label>
             <select
               required
               value={branchId}
@@ -229,7 +262,7 @@ export default function CustomerPage({
                 setBranchId(e.target.value);
                 setServiceId("");
               }}
-              className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-theme border border-theme-text/20 bg-theme-surface p-2.5 text-sm text-theme-text focus:border-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary/30"
             >
               <option value="">Select a branch</option>
               {branches.map((b) => (
@@ -241,13 +274,13 @@ export default function CustomerPage({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Select Service</label>
+            <label className="mb-1 block text-sm font-medium text-theme-text/80">Select Service</label>
             <select
               required
               disabled={!branchId}
               value={serviceId}
               onChange={(e) => setServiceId(e.target.value)}
-              className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-theme border border-theme-text/20 bg-theme-surface p-2.5 text-sm text-theme-text focus:border-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="">{branchId ? "Select a service" : "Select a branch first"}</option>
               {services.map((s) => (
@@ -263,41 +296,41 @@ export default function CustomerPage({
           <button
             type="submit"
             disabled={isBooking}
-            className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-theme bg-theme-primary py-3 font-semibold text-theme-on-primary transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isBooking ? "Getting ticket..." : "Get Queue Ticket"}
           </button>
         </form>
       ) : (
         <div className="text-center space-y-6">
-          <div className="p-6 bg-indigo-50 border border-indigo-200 rounded-xl">
-            <span className="text-xs uppercase tracking-widest text-indigo-600 font-bold">Your Ticket Number</span>
-            <div className="text-5xl font-extrabold text-indigo-900 my-2">
+          <div className="rounded-theme-lg border border-theme-primary/25 bg-theme-primary/10 p-6">
+            <span className="text-xs font-bold uppercase tracking-widest text-theme-primary">Your Ticket Number</span>
+            <div className="my-2 text-5xl font-extrabold text-theme-primary">
               A {String(ticket.ticket_number).padStart(3, "0")}
             </div>
-            <p className="text-sm text-indigo-700 font-medium">Name: {ticket.customer_name}</p>
-            <p className="text-sm text-indigo-700 font-medium">Branch: {ticket.branch_name}</p>
-            <p className="text-sm text-indigo-700 font-medium">Service: {ticket.service_name}</p>
-            <p className="text-sm text-indigo-700 font-medium">Queue: {ticket.queue_name}</p>
+            <p className="text-sm font-medium text-theme-text">Name: {ticket.customer_name}</p>
+            <p className="text-sm font-medium text-theme-text">Branch: {ticket.branch_name}</p>
+            <p className="text-sm font-medium text-theme-text">Service: {ticket.service_name}</p>
+            <p className="text-sm font-medium text-theme-text">Queue: {ticket.queue_name}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 border border-slate-200 rounded-lg text-center">
-              <Clock className="w-5 h-5 text-slate-400 mx-auto mb-1" />
-              <div className="text-xs text-slate-500">People Ahead</div>
-              <div className="text-xl font-bold text-slate-800">{ticket.people_ahead}</div>
+            <div className="rounded-theme border border-theme-text/10 bg-theme-surface p-4 text-center">
+              <Clock className="mx-auto mb-1 h-5 w-5 text-theme-text/40" />
+              <div className="text-xs text-theme-text/60">People Ahead</div>
+              <div className="text-xl font-bold text-theme-text">{ticket.people_ahead}</div>
             </div>
-            <div className="p-4 border border-slate-200 rounded-lg text-center">
-              <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-              <div className="text-xs text-slate-500">Status</div>
-              <div className="text-sm font-bold text-emerald-600 capitalize">{ticket.status}</div>
+            <div className="rounded-theme border border-theme-text/10 bg-theme-surface p-4 text-center">
+              <CheckCircle2 className="mx-auto mb-1 h-5 w-5 text-theme-secondary" />
+              <div className="text-xs text-theme-text/60">Status</div>
+              <div className="text-sm font-bold capitalize text-theme-secondary">{ticket.status}</div>
             </div>
           </div>
 
           {ticket.status === "completed" && (
             <button
               onClick={bookAnother}
-              className="text-xs text-slate-500 underline hover:text-slate-800"
+              className="text-xs text-theme-primary underline hover:opacity-80"
             >
               Book Another Ticket
             </button>
