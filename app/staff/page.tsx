@@ -1,13 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-<<<<<<< HEAD
-import { CheckCircle, Play, UserCheck } from "lucide-react";
 import WalkInTicketForm from "@/components/WalkInTicketForm";
 import { DEFAULT_APP_THEME, themeStyle, type AppTheme } from "@/lib/theme-style";
-=======
 import { AlertTriangle, CheckCircle, Clock3, Play, UserCheck } from "lucide-react";
->>>>>>> 3a4e7ee (Notify to staff page when reach daily ticket limit)
 
 interface AssignedQueue {
   id: string;
@@ -44,11 +40,8 @@ export default function StaffPage() {
   const [isCallingNext, setIsCallingNext] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [callError, setCallError] = useState("");
-<<<<<<< HEAD
   const [theme, setTheme] = useState<AppTheme | null>(null);
-=======
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
->>>>>>> 3a4e7ee (Notify to staff page when reach daily ticket limit)
   const servingTicket = tickets.find((ticket) => ticket.status === "serving");
   const waitingTickets = tickets.filter((ticket) => ticket.status === "waiting");
   const completedTickets = tickets.filter((ticket) => ticket.status === "completed");
@@ -197,10 +190,6 @@ export default function StaffPage() {
         )}
       </header>
 
-<<<<<<< HEAD
-      {error && <p className="rounded-theme border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      {callError && <p className="rounded-theme border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{callError}</p>}
-=======
       {error && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
       {callError && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{callError}</p>}
       {queue && dailyLimitReached && (
@@ -214,7 +203,6 @@ export default function StaffPage() {
           </div>
         </div>
       )}
->>>>>>> 3a4e7ee (Notify to staff page when reach daily ticket limit)
 
       {isLoading ? (
         <p className="py-10 text-center text-sm text-theme-text/60" role="status">Loading assigned queue...</p>
