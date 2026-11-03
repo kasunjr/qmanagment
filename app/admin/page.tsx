@@ -41,7 +41,6 @@ interface Queue {
   id: string;
   name: string;
   branch_id: string;
-  is_default: boolean;
   service_ids: string[];
 }
 interface Staff {
@@ -1544,11 +1543,6 @@ function AdminDashboard() {
                                 ) : (
                                   <p className="font-semibold text-slate-800">
                                     {item.name}
-                                    {item.is_default && (
-                                      <span className="ml-2 rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
-                                        Default
-                                      </span>
-                                    )}
                                   </p>
                                 )}
                                 <p className="text-xs text-slate-500">
@@ -1594,8 +1588,6 @@ function AdminDashboard() {
                                       <X className="w-4 h-4" />
                                     </button>
                                   </>
-                                ) : item.is_default ? (
-                                  <span aria-hidden="true" className="w-6" />
                                 ) : (
                                   <button
                                     aria-label={`Edit ${item.name}`}
@@ -1609,11 +1601,7 @@ function AdminDashboard() {
                                     <Edit2 className="w-4 h-4" />
                                   </button>
                                 )}
-                                {editingQueueId ===
-                                item.id ? null : item.is_default ? (
-                                  // Keeps "Add service" aligned with rows that have a delete button.
-                                  <span aria-hidden="true" className="w-6" />
-                                ) : (
+                                {editingQueueId === item.id ? null : (
                                   <button
                                     aria-label={`Delete ${item.name}`}
                                     onClick={() => void deleteQueue(item)}
@@ -1927,7 +1915,6 @@ function AdminDashboard() {
                                   >
                                     {branchName ? `${branchName}: ` : ""}
                                     {queue.name}
-                                    {queue.is_default ? " (default)" : ""}
                                     {assignedStaff
                                       ? ` (assigned to ${assignedStaff.name})`
                                       : ""}

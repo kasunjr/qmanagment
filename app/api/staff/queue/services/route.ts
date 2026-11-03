@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateStaffRequest } from "@/lib/staff-auth";
 import { db } from "@/lib/db";
-import { serviceInQueue } from "@/lib/queues";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,10 +20,9 @@ export async function GET(request: NextRequest) {
       `SELECT s.id, s.name, s.description, s.duration_minutes
        FROM staff_user_queues suq
        JOIN queues q ON q.id = suq.queue_id AND q.tenant_code = suq.tenant_code
-       JOIN services s ON s.tenant_code = q.tenant_code
-       LEFT JOIN queue_services qs ON qs.service_id = s.id AND qs.branch_id = q.branch_id
+       JOIN queue_services qs ON qs.queue_id = q.id
+       JOIN services s ON s.id = qs.service_id AND s.tenant_code = q.tenant_code
        WHERE suq.staff_user_id = $1 AND suq.tenant_code = $2 AND suq.queue_id = $3
-         AND ${serviceInQueue}
        ORDER BY s.name, s.id`,
       [staffUser.id, staffUser.tenant_code, staffUser.queue_id],
     );

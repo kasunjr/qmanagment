@@ -21,9 +21,15 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: "Booking link not found." }, { status: 404 });
     }
 
+    // Only branches with at least one service in a queue are bookable; service_ids lists those services.
     const [branches, services] = await Promise.all([
-      db.query<{ id: string; name: string; code: string }>(
-        "SELECT id, name, code FROM branches WHERE tenant_code = $1 ORDER BY name, id",
+      db.query<{ id: string; name: string; code: string; service_ids: string[] }>(
+        `SELECT b.id, b.name, b.code, array_agg(qs.service_id) AS service_ids
+         FROM branches b
+         JOIN queue_services qs ON qs.branch_id = b.id
+         WHERE b.tenant_code = $1
+         GROUP BY b.id
+         ORDER BY b.name, b.id`,
         [tenantCode],
       ),
       db.query<{ id: string; name: string; description: string; duration_minutes: number }>(

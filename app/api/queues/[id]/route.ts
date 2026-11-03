@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 import { db } from "@/lib/db";
-import {
-  isForeignKeyViolation,
-  queueColumns,
-  validateQueueFields,
-  type QueueRecord,
-} from "@/lib/queues";
+import { queueColumns, validateQueueFields, type QueueRecord } from "@/lib/queues";
 import { isUniqueViolation, isUuid } from "@/lib/staff-users";
 
 export const runtime = "nodejs";
@@ -54,30 +49,19 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
     if (!isUuid(params.id)) return NextResponse.json({ error: "Invalid queue ID." }, { status: 400 });
 
-    const existing = await db.query<{ is_default: boolean }>(
-      "SELECT is_default FROM queues WHERE id = $1 AND tenant_code = $2",
-      [params.id, user.tenant_code],
-    );
-    const queue = existing.rows[0];
-    if (!queue) return NextResponse.json({ error: "Queue not found." }, { status: 404 });
-    if (queue.is_default) {
-      return NextResponse.json({ error: "The default queue cannot be deleted." }, { status: 409 });
-    }
-
-    // Fails with a foreign key violation while services are still assigned to the queue.
+    // The queue's services are removed from it in the same statement, so they become unassigned.
     const result = await db.query<{ id: string }>(
-      "DELETE FROM queues WHERE id = $1 AND tenant_code = $2 AND NOT is_default RETURNING id",
+      `WITH target AS (
+         SELECT id FROM queues WHERE id = $1 AND tenant_code = $2
+       ), unassigned AS (
+         DELETE FROM queue_services WHERE queue_id IN (SELECT id FROM target)
+       )
+       DELETE FROM queues WHERE id IN (SELECT id FROM target) RETURNING id`,
       [params.id, user.tenant_code],
     );
     if (!result.rows[0]) return NextResponse.json({ error: "Queue not found." }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (error) {
-    if (isForeignKeyViolation(error)) {
-      return NextResponse.json(
-        { error: "Move this queue's services to another queue before deleting it." },
-        { status: 409 },
-      );
-    }
     console.error("Queue deletion failed:", error);
     return NextResponse.json({ error: "Unable to delete queue." }, { status: 500 });
   }

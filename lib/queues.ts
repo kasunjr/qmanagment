@@ -6,7 +6,6 @@ export interface QueueRecord {
   tenant_code: string;
   branch_id: string;
   name: string;
-  is_default: boolean;
   service_ids: string[];
   created_at: Date;
   updated_at: Date;
@@ -17,19 +16,12 @@ export interface QueueFields {
   branch_id?: string;
 }
 
-export const DEFAULT_QUEUE_NAME = "Default Queue";
-
-// A service with no queue_services row for a branch belongs to that branch's default queue.
-export const serviceInQueue =
-  "(qs.queue_id = q.id OR (qs.queue_id IS NULL AND q.is_default))";
-
 // Requires the queues table to be aliased as "q".
-export const queueColumns = `q.id, q.tenant_code, q.branch_id, q.name, q.is_default,
+export const queueColumns = `q.id, q.tenant_code, q.branch_id, q.name,
   COALESCE((
     SELECT array_agg(s.id ORDER BY s.name, s.id)
     FROM services s
-    LEFT JOIN queue_services qs ON qs.service_id = s.id AND qs.branch_id = q.branch_id
-    WHERE s.tenant_code = q.tenant_code AND ${serviceInQueue}
+    JOIN queue_services qs ON qs.service_id = s.id AND qs.queue_id = q.id
   ), '{}') AS service_ids,
   q.created_at, q.updated_at`;
 
@@ -71,14 +63,11 @@ export function isForeignKeyViolation(error: unknown): boolean {
   return !!error && typeof error === "object" && "code" in error && error.code === "23503";
 }
 
-// The queue a service uses in a branch: its assigned queue, otherwise the branch's default queue.
+// The queue a service uses in a branch, or null when it has not been added to one.
 export async function resolveQueueId(branchId: string, serviceId: string): Promise<string | null> {
-  const result = await db.query<{ id: string }>(
-    `SELECT q.id FROM queues q
-     JOIN services s ON s.id = $2 AND s.tenant_code = q.tenant_code
-     LEFT JOIN queue_services qs ON qs.service_id = s.id AND qs.branch_id = q.branch_id
-     WHERE q.branch_id = $1 AND ${serviceInQueue}`,
+  const result = await db.query<{ queue_id: string }>(
+    "SELECT queue_id FROM queue_services WHERE branch_id = $1 AND service_id = $2",
     [branchId, serviceId],
   );
-  return result.rows[0]?.id ?? null;
+  return result.rows[0]?.queue_id ?? null;
 }

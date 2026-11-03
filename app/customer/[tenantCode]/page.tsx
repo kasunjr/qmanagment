@@ -8,6 +8,7 @@ interface Branch {
   id: string;
   name: string;
   code: string;
+  service_ids: string[];
 }
 interface Service {
   id: string;
@@ -113,6 +114,9 @@ export default function CustomerPage({
 
   const ticketStorageKey = `qms_ticket_${tenantCode}`;
   const selectedService = services.find((s) => s.id === serviceId);
+  // Only services added to a queue in the selected branch can be booked there.
+  const branchServiceIds = branches.find((b) => b.id === branchId)?.service_ids ?? [];
+  const branchServices = services.filter((s) => branchServiceIds.includes(s.id));
 
   // Local storage can be unavailable (private mode, blocked site data); the page works without it.
   const storeTicket = (value: QueueTicket | null) => {
@@ -285,7 +289,7 @@ export default function CustomerPage({
               className="w-full rounded-theme border border-theme-text/20 bg-theme-surface p-2.5 text-sm text-theme-text focus:border-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="">{branchId ? "Select a service" : "Select a branch first"}</option>
-              {services.map((s) => (
+              {branchServices.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>

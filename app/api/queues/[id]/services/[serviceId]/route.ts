@@ -17,8 +17,8 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (!isUuid(params.id)) return NextResponse.json({ error: "Invalid queue ID." }, { status: 400 });
     if (!isUuid(params.serviceId)) return NextResponse.json({ error: "Invalid service ID." }, { status: 400 });
 
-    const queueResult = await db.query<{ branch_id: string; is_default: boolean }>(
-      "SELECT branch_id, is_default FROM queues WHERE id = $1 AND tenant_code = $2",
+    const queueResult = await db.query<{ branch_id: string }>(
+      "SELECT branch_id FROM queues WHERE id = $1 AND tenant_code = $2",
       [params.id, user.tenant_code],
     );
     const target = queueResult.rows[0];
@@ -30,20 +30,12 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     );
     if (!serviceResult.rows[0]) return NextResponse.json({ error: "Service not found." }, { status: 404 });
 
-    if (target.is_default) {
-      // The default queue is the absence of an assignment.
-      await db.query(
-        "DELETE FROM queue_services WHERE branch_id = $1 AND service_id = $2",
-        [target.branch_id, params.serviceId],
-      );
-    } else {
-      await db.query(
-        `INSERT INTO queue_services (branch_id, service_id, queue_id)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (branch_id, service_id) DO UPDATE SET queue_id = EXCLUDED.queue_id`,
-        [target.branch_id, params.serviceId, params.id],
-      );
-    }
+    await db.query(
+      `INSERT INTO queue_services (branch_id, service_id, queue_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (branch_id, service_id) DO UPDATE SET queue_id = EXCLUDED.queue_id`,
+      [target.branch_id, params.serviceId, params.id],
+    );
 
     const result = await db.query<QueueRecord>(
       `SELECT ${queueColumns} FROM queues q WHERE q.id = $1 AND q.tenant_code = $2`,

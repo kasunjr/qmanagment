@@ -86,13 +86,13 @@ The admin staff-user screen uses these endpoints. The staff counter page reads t
 These routes back the admin Configurations tab. All of them require the account access token in `Authorization: Bearer <account-access-token>` and only see rows matching the account's `tenant_code`. A duplicate returns `409`; an ID from another tenant returns `404`.
 
 - Branches and services are tenant-wide. There is no branch-to-service link: every branch offers every service.
-- Queues belong to a branch. Creating a branch also creates its `Default Queue`, which cannot be deleted.
-- Within a branch a service belongs to exactly one queue. It is in the branch's default queue unless moved; `queue_services` stores only the non-default assignments.
+- Queues belong to a branch. A new branch has no queues; the admin creates them with any name.
+- A new queue has no services; the admin adds them with "Add service". Within a branch a service belongs to at most one queue, stored in `queue_services`. A service that is not in a queue in a branch cannot be booked there.
 
 | Method and path | Purpose |
 | --- | --- |
 | `GET /api/branches` | List the tenant's branches. |
-| `POST /api/branches` | Create a branch and its default queue. Body: `{"name":"Downtown","code":"DT01"}`. `code` is unique per tenant and stored uppercase. |
+| `POST /api/branches` | Create a branch (with no queues). Body: `{"name":"Downtown","code":"DT01"}`. `code` is unique per tenant and stored uppercase. |
 | `PATCH /api/branches/{id}` | Update `name` and/or `code`. |
 | `DELETE /api/branches/{id}` | Delete a branch, with its queues, service assignments and tickets. |
 | `GET /api/services` | List the tenant's services. |
@@ -100,10 +100,10 @@ These routes back the admin Configurations tab. All of them require the account 
 | `PATCH /api/services/{id}` | Update `name`, `description` and/or `duration_minutes`. |
 | `DELETE /api/services/{id}` | Delete a service, with its queue assignments and tickets. |
 | `GET /api/queues` | List the tenant's queues, each with the `service_ids` it holds. Optional `?branch_id={id}` filter. |
-| `POST /api/queues` | Create a non-default queue. Body: `{"name":"Loans Queue","branch_id":"<branch id>"}`. `name` is unique per branch. |
+| `POST /api/queues` | Create a queue with no services. Body: `{"name":"Loans Queue","branch_id":"<branch id>"}`. `name` is unique per branch. |
 | `PATCH /api/queues/{id}` | Rename a queue. Body: `{"name":"New name"}`. |
-| `DELETE /api/queues/{id}` | Delete a queue. Returns `409` for the default queue or while services are still assigned to it. |
-| `PUT /api/queues/{id}/services/{serviceId}` | Move a service into this queue, out of the queue it used in that branch. Moving it to the default queue removes the assignment. No body. |
+| `DELETE /api/queues/{id}` | Delete a queue, with its tickets and staff assignment. Its services are removed from it and become unassigned in that branch. |
+| `PUT /api/queues/{id}/services/{serviceId}` | Add a service to this queue, moving it out of any other queue in that branch. No body. |
 
 ### Customer Portal (Public)
 
@@ -111,14 +111,14 @@ These routes need no login. The tenant is identified by the 7-character tenant c
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /api/public/{tenantCode}/booking-options` | Branches (`id`, `name`, `code`) and services (`id`, `name`, `description`, `duration_minutes`) a customer can choose from. |
-| `POST /api/public/{tenantCode}/tickets` | Create a ticket. Body: `{"customer_name":"John Doe","branch_id":"<branch id>","service_id":"<service id>"}`. Returns `201` with the ticket; `400` for invalid input; `404` if the branch or service is not in the tenant. |
+| `GET /api/public/{tenantCode}/booking-options` | Bookable branches (`id`, `name`, `code`, `service_ids`) and services (`id`, `name`, `description`, `duration_minutes`) a customer can choose from. A branch is listed only if at least one service is in a queue there; its `service_ids` are the services bookable at that branch. |
+| `POST /api/public/{tenantCode}/tickets` | Create a ticket. Body: `{"customer_name":"John Doe","branch_id":"<branch id>","service_id":"<service id>"}`. Returns `201` with the ticket; `400` for invalid input; `404` if the branch or service is not in the tenant, or the service is not in a queue in that branch. |
 | `GET /api/public/{tenantCode}/tickets/{ticketId}` | Current state of a ticket created today. Returns `404` for an unknown ticket or one from a previous day. |
 
 A ticket response contains `id`, `ticket_number`, `customer_name`, `status`, `branch_name`, `service_name`, `queue_name`, `people_ahead` and `created_at`.
 
 - **Number**: one running number per branch that restarts each day, taken from `ticket_counters`. The customer page shows it padded to three digits (`001`).
-- **Queue**: chosen by the server from the branch and service: the queue the service is assigned to in that branch, otherwise the branch's default queue.
+- **Queue**: chosen by the server from the branch and service: the queue the service is assigned to in that branch.
 - **Status**: `waiting`, `serving` or `completed`. New tickets are `waiting`. Nothing sets the other two yet; that belongs to the staff counter work.
 - **People ahead**: waiting tickets in the same queue on the same day with a lower number.
 
@@ -168,7 +168,7 @@ app/
   api/staff-users/route.ts    Tenant-scoped staff list and creation
   api/staff-users/[id]/route.ts  Tenant-scoped staff retrieval, update, and deletion
   api/staff-auth/*/route.ts   Separate staff login, session verification, and logout
-  api/branches/route.ts       Tenant-scoped branch list and creation (with default queue)
+  api/branches/route.ts       Tenant-scoped branch list and creation
   api/branches/[id]/route.ts  Branch update and deletion
   api/services/route.ts       Tenant-scoped service list and creation
   api/services/[id]/route.ts  Service update and deletion
@@ -207,7 +207,7 @@ migrations/
   003_staff_users.sql  Tenant-scoped staff users and hashed login codes
   004_branches.sql     Tenant-scoped branches
   005_services.sql     Tenant-scoped services
-  006_queues.sql       Per-branch queues and non-default service assignments
+  006_queues.sql       Per-branch queues and service assignments
   007_tickets.sql      Tickets and per-branch daily ticket counters
 scripts/
   migrate.mjs          Applies pending SQL migrations

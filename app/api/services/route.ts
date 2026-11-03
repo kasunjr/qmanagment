@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const validation = validateServiceFields(body);
     if ("error" in validation) return NextResponse.json({ error: validation.error }, { status: 400 });
 
-    // No queue_services rows are needed: a new service starts in every branch's default queue.
+    // A new service is in no queue until the admin adds it to one.
     const { name, description, duration_minutes } = validation.fields;
     const result = await withPlanLimit(user.tenant_code, "services", (client) => client.query<ServiceRecord>(
       `INSERT INTO services (tenant_code, name, description, duration_minutes)

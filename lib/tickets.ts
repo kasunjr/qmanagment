@@ -1,6 +1,5 @@
 import type { Pool, PoolClient } from "pg";
 import { db } from "@/lib/db";
-import { serviceInQueue } from "@/lib/queues";
 import { isUuid } from "@/lib/staff-users";
 
 export interface TicketRecord {
@@ -90,8 +89,8 @@ export async function createTicket(
        FROM queues q
        JOIN branches b ON b.id = q.branch_id
        JOIN services s ON s.id = $3 AND s.tenant_code = q.tenant_code
-       LEFT JOIN queue_services qs ON qs.service_id = s.id AND qs.branch_id = q.branch_id
-       WHERE q.branch_id = $2 AND q.tenant_code = $1 AND ${serviceInQueue}
+       JOIN queue_services qs ON qs.service_id = s.id AND qs.queue_id = q.id
+       WHERE q.branch_id = $2 AND q.tenant_code = $1
          AND ($5::uuid IS NULL OR q.id = $5::uuid)
      ), counter AS (
        INSERT INTO ticket_counters (branch_id, ticket_date, last_number)

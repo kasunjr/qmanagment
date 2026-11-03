@@ -34,7 +34,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       const ticket = await createTicket(tenantCode, validation.fields, undefined, client);
       if (!ticket) {
         await client.query("ROLLBACK");
-        return NextResponse.json({ error: "Branch or service not found." }, { status: 404 });
+        return NextResponse.json({ error: "This service is not available at this branch." }, { status: 404 });
       }
       if (!(await consumeDailyTicket(client, tenantCode))) {
         await client.query("ROLLBACK");

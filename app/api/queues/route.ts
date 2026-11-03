@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     const result = await db.query<QueueRecord>(
       `SELECT ${queueColumns} FROM queues q
        WHERE q.tenant_code = $1${branchId !== null ? " AND q.branch_id = $2" : ""}
-       ORDER BY q.branch_id, q.is_default DESC, q.created_at, q.id`,
+       ORDER BY q.branch_id, q.created_at, q.id`,
       values,
     );
     return NextResponse.json({ queues: result.rows });
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     if ("error" in validation) return NextResponse.json({ error: validation.error }, { status: 400 });
 
     // Selecting from branches ensures the branch belongs to this tenant.
-    // The queue limit counts all of the tenant's queues, default queues included.
+    // The queue limit counts all of the tenant's queues. A new queue starts with no services.
     const { name, branch_id } = validation.fields;
     const result = await withPlanLimit(user.tenant_code, "queues", (client) => client.query<QueueRecord>(
       `INSERT INTO queues AS q (tenant_code, branch_id, name)

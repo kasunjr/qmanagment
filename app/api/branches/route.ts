@@ -3,7 +3,6 @@ import { authenticateRequest } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { branchColumns, validateBranchFields, type BranchRecord } from "@/lib/branches";
 import { PlanLimitError, planLimitResponse, withPlanLimit } from "@/lib/plans";
-import { DEFAULT_QUEUE_NAME } from "@/lib/queues";
 import { isUniqueViolation } from "@/lib/staff-users";
 
 export const runtime = "nodejs";
@@ -41,20 +40,13 @@ export async function POST(request: NextRequest) {
     const validation = validateBranchFields(body);
     if ("error" in validation) return NextResponse.json({ error: validation.error }, { status: 400 });
 
-    // The branch and its default queue are created in one statement so a branch never exists without one.
-    // Only the branch limit applies: the default queue is part of the branch, even when the queue limit is reached.
+    // A new branch has no queues; the admin creates them and adds services.
     const { name, code } = validation.fields;
     const result = await withPlanLimit(user.tenant_code, "branches", (client) => client.query<BranchRecord>(
-      `WITH branch AS (
-         INSERT INTO branches (tenant_code, name, code)
-         VALUES ($1, $2, $3)
-         RETURNING ${branchColumns}
-       ), default_queue AS (
-         INSERT INTO queues (tenant_code, branch_id, name, is_default)
-         SELECT tenant_code, id, $4, TRUE FROM branch
-       )
-       SELECT ${branchColumns} FROM branch`,
-      [user.tenant_code, name, code, DEFAULT_QUEUE_NAME],
+      `INSERT INTO branches (tenant_code, name, code)
+       VALUES ($1, $2, $3)
+       RETURNING ${branchColumns}`,
+      [user.tenant_code, name, code],
     ));
     return NextResponse.json({ branch: result.rows[0] }, { status: 201 });
   } catch (error) {
