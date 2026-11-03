@@ -8,12 +8,14 @@ body {
 }
 
 input,
-select {
+select,
+textarea {
   background-color: #09090b;
   color: #f4f4f5;
 }
 
-input::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: #71717a;
 }
 
@@ -23,7 +25,8 @@ option {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: none;
   box-shadow: 0 0 0 2px #2dd4bf;
 }

@@ -12,6 +12,7 @@ interface Branch {
 interface Service {
   id: string;
   name: string;
+  description: string;
   duration_minutes: number;
 }
 interface QueueTicket {
@@ -111,6 +112,7 @@ export default function CustomerPage({
   }, [tenantCode]);
 
   const ticketStorageKey = `qms_ticket_${tenantCode}`;
+  const selectedService = services.find((s) => s.id === serviceId);
 
   // Local storage can be unavailable (private mode, blocked site data); the page works without it.
   const storeTicket = (value: QueueTicket | null) => {
@@ -289,6 +291,11 @@ export default function CustomerPage({
                 </option>
               ))}
             </select>
+            {selectedService?.description && (
+              <p className="mt-2 whitespace-pre-line text-sm text-theme-text/70">
+                {selectedService.description}
+              </p>
+            )}
           </div>
 
           {bookError && <p className="text-sm text-red-500" role="alert">{bookError}</p>}

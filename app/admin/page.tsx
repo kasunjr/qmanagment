@@ -34,6 +34,7 @@ interface Branch {
 interface Service {
   id: string;
   name: string;
+  description: string;
   duration_minutes: number;
 }
 interface Queue {
@@ -300,9 +301,9 @@ function AdminDashboard() {
   const [isServicesLoading, setIsServicesLoading] = useState(false);
   const [isSavingService, setIsSavingService] = useState(false);
   const [serviceError, setServiceError] = useState("");
-  const [serviceForm, setServiceForm] = useState({ name: "", duration: "15" });
+  const [serviceForm, setServiceForm] = useState({ name: "", description: "", duration: "15" });
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
-  const [serviceEdit, setServiceEdit] = useState({ name: "", duration: "" });
+  const [serviceEdit, setServiceEdit] = useState({ name: "", description: "", duration: "" });
 
   const [queues, setQueues] = useState<Queue[]>([]);
   const [isQueuesLoading, setIsQueuesLoading] = useState(false);
@@ -603,7 +604,7 @@ function AdminDashboard() {
   }, [accessToken]);
 
   const saveService = async (
-    form: { name: string; duration: string },
+    form: { name: string; description: string; duration: string },
     serviceId: string | null,
   ) => {
     if (!accessToken) return;
@@ -621,6 +622,7 @@ function AdminDashboard() {
           },
           body: JSON.stringify({
             name: form.name.trim(),
+            description: form.description.trim(),
             duration_minutes: Number(form.duration),
           }),
         },
@@ -642,7 +644,7 @@ function AdminDashboard() {
       );
       if (serviceId) setEditingServiceId(null);
       else {
-        setServiceForm({ name: "", duration: "15" });
+        setServiceForm({ name: "", description: "", duration: "15" });
         void loadUsage();
       }
     } catch (error) {
@@ -1243,12 +1245,13 @@ function AdminDashboard() {
             {configSubTab === "services" && (
               <div>
                 <form
-                  className="flex gap-2 mb-6 max-w-xl"
+                  className="mb-6 max-w-xl"
                   onSubmit={(event) => {
                     event.preventDefault();
                     void saveService(serviceForm, null);
                   }}
                 >
+                  <div className="flex gap-2">
                   <input
                     type="text"
                     placeholder="Service Name"
@@ -1283,6 +1286,21 @@ function AdminDashboard() {
                   >
                     <Plus className="w-4 h-4" /> Add
                   </button>
+                  </div>
+                  <textarea
+                    aria-label="Service description"
+                    placeholder="Description (optional)"
+                    maxLength={500}
+                    rows={2}
+                    value={serviceForm.description}
+                    onChange={(e) =>
+                      setServiceForm({
+                        ...serviceForm,
+                        description: e.target.value,
+                      })
+                    }
+                    className="mt-2 p-2 text-sm border rounded w-full"
+                  />
                 </form>
 
                 {serviceError && (
@@ -1308,7 +1326,8 @@ function AdminDashboard() {
                       className="p-4 flex items-center justify-between hover:bg-slate-50"
                     >
                       {editingServiceId === item.id ? (
-                        <div className="flex gap-2 w-full mr-4">
+                        <div className="w-full mr-4">
+                          <div className="flex gap-2">
                           <input
                             type="text"
                             aria-label="Service name"
@@ -1336,12 +1355,32 @@ function AdminDashboard() {
                             }
                             className="p-1 border rounded text-sm w-1/2"
                           />
+                          </div>
+                          <textarea
+                            aria-label="Service description"
+                            placeholder="Description (optional)"
+                            maxLength={500}
+                            rows={2}
+                            value={serviceEdit.description}
+                            onChange={(e) =>
+                              setServiceEdit({
+                                ...serviceEdit,
+                                description: e.target.value,
+                              })
+                            }
+                            className="mt-2 p-1 border rounded text-sm w-full"
+                          />
                         </div>
                       ) : (
                         <div>
                           <p className="font-semibold text-slate-800">
                             {item.name}
                           </p>
+                          {item.description && (
+                            <p className="text-sm text-slate-600 whitespace-pre-line">
+                              {item.description}
+                            </p>
+                          )}
                           <p className="text-xs text-slate-500">
                             Duration: {item.duration_minutes} mins
                           </p>
@@ -1381,6 +1420,7 @@ function AdminDashboard() {
                                 setEditingServiceId(item.id);
                                 setServiceEdit({
                                   name: item.name,
+                                  description: item.description,
                                   duration: String(item.duration_minutes),
                                 });
                               }}

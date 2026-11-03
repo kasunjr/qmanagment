@@ -6,6 +6,7 @@ import { Check, ChevronDown, Search, Ticket, UserPlus, X } from "lucide-react";
 interface QueueService {
   id: string;
   name: string;
+  description: string;
   duration_minutes: number;
 }
 
@@ -216,6 +217,9 @@ export default function WalkInTicketForm() {
                           <span className={`block truncate text-sm ${isSelected ? "font-semibold text-theme-primary" : "font-medium"}`}>
                             {service.name}
                           </span>
+                          {service.description && (
+                            <span className="block text-xs text-theme-text/70">{service.description}</span>
+                          )}
                           <span className="block truncate text-xs text-theme-text/60">About {service.duration_minutes} min</span>
                         </span>
                       </label>

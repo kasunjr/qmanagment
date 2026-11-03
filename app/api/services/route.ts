@@ -41,12 +41,12 @@ export async function POST(request: NextRequest) {
     if ("error" in validation) return NextResponse.json({ error: validation.error }, { status: 400 });
 
     // No queue_services rows are needed: a new service starts in every branch's default queue.
-    const { name, duration_minutes } = validation.fields;
+    const { name, description, duration_minutes } = validation.fields;
     const result = await withPlanLimit(user.tenant_code, "services", (client) => client.query<ServiceRecord>(
-      `INSERT INTO services (tenant_code, name, duration_minutes)
-       VALUES ($1, $2, $3)
+      `INSERT INTO services (tenant_code, name, description, duration_minutes)
+       VALUES ($1, $2, $3, $4)
        RETURNING ${serviceColumns}`,
-      [user.tenant_code, name, duration_minutes],
+      [user.tenant_code, name, description, duration_minutes],
     ));
     return NextResponse.json({ service: result.rows[0] }, { status: 201 });
   } catch (error) {

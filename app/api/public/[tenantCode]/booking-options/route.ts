@@ -26,8 +26,8 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
         "SELECT id, name, code FROM branches WHERE tenant_code = $1 ORDER BY name, id",
         [tenantCode],
       ),
-      db.query<{ id: string; name: string; duration_minutes: number }>(
-        "SELECT id, name, duration_minutes FROM services WHERE tenant_code = $1 ORDER BY name, id",
+      db.query<{ id: string; name: string; description: string; duration_minutes: number }>(
+        "SELECT id, name, description, duration_minutes FROM services WHERE tenant_code = $1 ORDER BY name, id",
         [tenantCode],
       ),
     ]);

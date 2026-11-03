@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ services: [] });
     }
 
-    const result = await db.query<{ id: string; name: string; duration_minutes: number }>(
-      `SELECT s.id, s.name, s.duration_minutes
+    const result = await db.query<{ id: string; name: string; description: string; duration_minutes: number }>(
+      `SELECT s.id, s.name, s.description, s.duration_minutes
        FROM staff_user_queues suq
        JOIN queues q ON q.id = suq.queue_id AND q.tenant_code = suq.tenant_code
        JOIN services s ON s.tenant_code = q.tenant_code

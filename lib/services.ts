@@ -2,6 +2,7 @@ export interface ServiceRecord {
   id: string;
   tenant_code: string;
   name: string;
+  description: string;
   duration_minutes: number;
   created_at: Date;
   updated_at: Date;
@@ -9,11 +10,12 @@ export interface ServiceRecord {
 
 export interface ServiceFields {
   name?: string;
+  description?: string;
   duration_minutes?: number;
 }
 
 export const serviceColumns =
-  "id, tenant_code, name, duration_minutes, created_at, updated_at";
+  "id, tenant_code, name, description, duration_minutes, created_at, updated_at";
 
 export function validateServiceFields(
   value: unknown,
@@ -32,6 +34,15 @@ export function validateServiceFields(
       return { error: "Name must be between 1 and 120 characters." };
     }
     fields.name = body.name.trim();
+  }
+
+  if (has("description")) {
+    if (typeof body.description !== "string" || body.description.trim().length > 500) {
+      return { error: "Description must be at most 500 characters." };
+    }
+    fields.description = body.description.trim();
+  } else if (!partial) {
+    fields.description = "";
   }
 
   if (has("duration_minutes")) {

@@ -96,8 +96,8 @@ These routes back the admin Configurations tab. All of them require the account 
 | `PATCH /api/branches/{id}` | Update `name` and/or `code`. |
 | `DELETE /api/branches/{id}` | Delete a branch, with its queues, service assignments and tickets. |
 | `GET /api/services` | List the tenant's services. |
-| `POST /api/services` | Create a service. Body: `{"name":"Loans","duration_minutes":20}`; `duration_minutes` is optional (1-1440, default 15). `name` is unique per tenant. |
-| `PATCH /api/services/{id}` | Update `name` and/or `duration_minutes`. |
+| `POST /api/services` | Create a service. Body: `{"name":"Loans","description":"Personal and home loans","duration_minutes":20}`; `description` is optional (up to 500 characters, default empty) and `duration_minutes` is optional (1-1440, default 15). `name` is unique per tenant. |
+| `PATCH /api/services/{id}` | Update `name`, `description` and/or `duration_minutes`. |
 | `DELETE /api/services/{id}` | Delete a service, with its queue assignments and tickets. |
 | `GET /api/queues` | List the tenant's queues, each with the `service_ids` it holds. Optional `?branch_id={id}` filter. |
 | `POST /api/queues` | Create a non-default queue. Body: `{"name":"Loans Queue","branch_id":"<branch id>"}`. `name` is unique per branch. |
@@ -111,7 +111,7 @@ These routes need no login. The tenant is identified by the 7-character tenant c
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /api/public/{tenantCode}/booking-options` | Branches (`id`, `name`, `code`) and services (`id`, `name`, `duration_minutes`) a customer can choose from. |
+| `GET /api/public/{tenantCode}/booking-options` | Branches (`id`, `name`, `code`) and services (`id`, `name`, `description`, `duration_minutes`) a customer can choose from. |
 | `POST /api/public/{tenantCode}/tickets` | Create a ticket. Body: `{"customer_name":"John Doe","branch_id":"<branch id>","service_id":"<service id>"}`. Returns `201` with the ticket; `400` for invalid input; `404` if the branch or service is not in the tenant. |
 | `GET /api/public/{tenantCode}/tickets/{ticketId}` | Current state of a ticket created today. Returns `404` for an unknown ticket or one from a previous day. |
 
