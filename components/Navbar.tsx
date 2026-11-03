@@ -11,9 +11,9 @@ export default function Navbar() {
   const router = useRouter();
   const { user, isLoading, signOut } = useAuth();
   const isStaffRoute =
-    pathname === "/staff" || /^\/[A-F0-9]{7}\/staff(?:\/|$)/i.test(pathname);
-  const staffTenantCode = pathname.match(/^\/([A-F0-9]{7})\/staff(?:\/|$)/i)?.[1];
-  const customerTenantCode = pathname.match(/^\/([A-F0-9]{7})\/customer(?:\/|$)/i)?.[1];
+    pathname === "/staff" || /^\/staff\/[A-F0-9]{7}(?:\/|$)/i.test(pathname);
+  const staffTenantCode = pathname.match(/^\/staff\/([A-F0-9]{7})(?:\/|$)/i)?.[1];
+  const customerTenantCode = pathname.match(/^\/customer\/([A-F0-9]{7})(?:\/|$)/i)?.[1];
   const [isStaffAuthenticated, setIsStaffAuthenticated] = useState(false);
   const [isStaffSigningOut, setIsStaffSigningOut] = useState(false);
   const [staffBrand, setStaffBrand] = useState<AppTheme | null>(null);
@@ -100,7 +100,7 @@ export default function Navbar() {
       const tenantCode = result?.tenantCode;
       router.replace(
         tenantCode && /^[A-F0-9]{7}$/i.test(tenantCode)
-          ? `/${tenantCode}/staff`
+          ? `/staff/${tenantCode}`
           : "/",
       );
     } catch (error) {

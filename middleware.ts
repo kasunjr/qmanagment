@@ -12,8 +12,8 @@ const JWT_ISSUER = "queue-management-system";
 const JWT_AUDIENCE = "queue-management-api";
 
 export async function middleware(request: NextRequest) {
-  const isStaffPath = request.nextUrl.pathname === "/staff" ||
-    request.nextUrl.pathname.startsWith("/staff/");
+  // Only the staff counter is protected; /staff/{tenantCode} is the public staff login page.
+  const isStaffPath = request.nextUrl.pathname === "/staff";
 
   if (isStaffPath) {
     const staffToken = request.cookies.get(STAFF_ACCESS_COOKIE)?.value;
@@ -36,7 +36,7 @@ export async function middleware(request: NextRequest) {
 
     const tenantCode = request.cookies.get(STAFF_TENANT_COOKIE)?.value;
     if (tenantCode && /^[A-F0-9]{7}$/.test(tenantCode)) {
-      return NextResponse.redirect(new URL(`/${tenantCode}/staff`, request.url));
+      return NextResponse.redirect(new URL(`/staff/${tenantCode}`, request.url));
     }
     return NextResponse.redirect(new URL("/", request.url));
   }
@@ -63,5 +63,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/staff/:path*"],
+  matcher: ["/admin/:path*", "/staff"],
 };

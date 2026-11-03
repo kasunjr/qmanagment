@@ -212,8 +212,8 @@ function AdminDashboard() {
 
   useEffect(() => {
     if (!user?.tenant_code) return;
-    setStaffUrl(`http://localhost:3000/${user.tenant_code}/staff`);
-    setCustomerUrl(`http://localhost:3000/${user.tenant_code}/customer`);
+    setStaffUrl(`http://localhost:3000/staff/${user.tenant_code}`);
+    setCustomerUrl(`http://localhost:3000/customer/${user.tenant_code}`);
   }, [user?.tenant_code]);
 
   // The tenant's plan, its limits and current usage; null until loaded or if loading fails.

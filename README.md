@@ -75,7 +75,7 @@ Staff users are separate from account users. An authenticated account manages on
 | `POST /api/staff/queue/complete` | Complete the current serving ticket and call the next waiting ticket in the assigned queue. Returns `409` if there is no serving ticket to complete. |
 | `POST /api/staff-auth/logout` | Clear only the staff authentication and tenant cookies. |
 
-Staff JWTs use `JWT_STAFF_ACCESS_SECRET`, a separate issuer/audience, and an 8-hour lifetime. Account tokens cannot authenticate staff sessions, and staff tokens cannot authenticate account endpoints. `/{tenantCode}/staff` is the tenant-specific staff login page. Successful login redirects to `/staff`, which is protected by middleware; without a valid staff JWT, requests are redirected to the remembered tenant login page or `/` if no tenant is known. The shared navbar hides the Admin Portal/account controls on staff routes and shows staff logout only for a verified staff session.
+Staff JWTs use `JWT_STAFF_ACCESS_SECRET`, a separate issuer/audience, and an 8-hour lifetime. Account tokens cannot authenticate staff sessions, and staff tokens cannot authenticate account endpoints. `/staff/{tenantCode}` is the tenant-specific staff login page. Successful login redirects to `/staff`, which is protected by middleware; without a valid staff JWT, requests are redirected to the remembered tenant login page or `/` if no tenant is known. The shared navbar hides the Admin Portal/account controls on staff routes and shows staff logout only for a verified staff session.
 
 The staff login and `/api/staff-auth/me` responses also include the assigned `queue_id` (or `null`). A queue can be assigned to only one staff user, and a staff user can be assigned to only one queue. The API and database enforce tenant boundaries and unique queue ownership.
 
@@ -122,7 +122,7 @@ A ticket response contains `id`, `ticket_number`, `customer_name`, `status`, `br
 - **Status**: `waiting`, `serving` or `completed`. New tickets are `waiting`. Nothing sets the other two yet; that belongs to the staff counter work.
 - **People ahead**: waiting tickets in the same queue on the same day with a lower number.
 
-The customer page at `/{tenantCode}/customer` stores the ticket in the browser's local storage under `qms_ticket_{tenantCode}` so it survives a reload. On load it refreshes the ticket from the server; a ticket that is completed, missing or from a previous day is removed from local storage. "Book Another Ticket" is shown only for a completed ticket.
+The customer page at `/customer/{tenantCode}` stores the ticket in the browser's local storage under `qms_ticket_{tenantCode}` so it survives a reload. On load it refreshes the ticket from the server; a ticket that is completed, missing or from a previous day is removed from local storage. "Book Another Ticket" is shown only for a completed ticket.
 
 The ticket routes are public and not rate limited: anyone with the tenant link can create tickets.
 
@@ -178,8 +178,8 @@ app/
   api/public/[tenantCode]/booking-options/route.ts  Public branches and services for booking
   api/public/[tenantCode]/tickets/route.ts          Public ticket creation
   api/public/[tenantCode]/tickets/[ticketId]/route.ts  Public ticket status
-  [tenantCode]/staff/page.tsx Tenant-specific staff login page
-  [tenantCode]/customer/page.tsx  Tenant-specific customer ticket booking page
+  staff/[tenantCode]/page.tsx Tenant-specific staff login page
+  customer/[tenantCode]/page.tsx  Tenant-specific customer ticket booking page
   login/page.tsx              Login page
   signup/page.tsx             Signup page
   admin/page.tsx       Admin portal: QR codes, configuration, and analytics UI
@@ -192,7 +192,7 @@ components/
   AuthForm.tsx         Shared login/signup form
   AuthProvider.tsx     Session restoration and access-token lifecycle
   Navbar.tsx           Shared navigation bar
-middleware.ts          JWT checks for /admin and /staff requests
+middleware.ts          JWT checks for /admin and the /staff counter
 lib/
   auth.ts              Password, JWT, refresh-token, and request auth helpers
   staff-auth.ts        Separate staff JWT, code verification, cookies, and request auth
@@ -224,8 +224,8 @@ The application uses the Next.js App Router. Each folder under `app/` maps to a 
 | Route | Page |
 | --- | --- |
 | `/` | Home |
-| `/{tenantCode}/customer` | Customer queue portal for the tenant identified by its 7-character code; no login |
-| `/{tenantCode}/staff` | Staff login for the tenant identified by its 7-character code |
+| `/customer/{tenantCode}` | Customer queue portal for the tenant identified by its 7-character code; no login |
+| `/staff/{tenantCode}` | Staff login for the tenant identified by its 7-character code |
 | `/staff` | Protected staff counter terminal; requires a staff session |
 | `/admin` | Admin portal |
 | `/pricing` | Pricing plans |
@@ -237,6 +237,6 @@ The application uses the Next.js App Router. Each folder under `app/` maps to a 
 - Most styling uses Tailwind utility classes. Global CSS and Tailwind directives are in `app/globals.css`; Tailwind scans the `app/` and `components/` trees.
 - Pages that use React state, event handlers, or browser APIs should be client components and start with the `"use client"` directive.
 - Account auth, staff-user management, staff authentication, branch/service/queue configuration, and customer tickets use PostgreSQL. The staff counter page still uses local React state and sample data; counter operations are not yet persisted.
-- The home page still links to `/customer`, which no longer exists; the customer portal is only reachable at `/{tenantCode}/customer`.
+- The home page still links to `/customer`, which no longer exists; the customer portal is only reachable at `/customer/{tenantCode}`.
 - Use the existing dependencies where possible: `lucide-react` for icons and `qrcode.react` for QR code rendering.
 - Before sharing changes, run `npm run build` from the project root. It performs the production build and Next.js lint/type checks. The current `npm run lint` command opens interactive ESLint setup because no ESLint configuration is checked in.
