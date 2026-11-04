@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { createStaffAccessToken, setStaffAuthCookies, verifyStaffCode } from "@/lib/staff-auth";
-import { staffUserColumnsWithQueue, type StaffUserRecord } from "@/lib/staff-users";
+import { staffUserColumnsWithServices, type StaffUserRecord } from "@/lib/staff-users";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     const tenantCode = input.tenant_code.trim().toUpperCase();
     const username = input.username.trim().toLowerCase();
     const result = await db.query<StaffLoginRecord>(
-      `SELECT ${staffUserColumnsWithQueue}, code_hash FROM staff_users
+      `SELECT ${staffUserColumnsWithServices}, code_hash FROM staff_users
        WHERE tenant_code = $1 AND username = $2`,
       [tenantCode, username],
     );

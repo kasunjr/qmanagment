@@ -23,7 +23,8 @@ interface QueueTicket {
   status: string;
   branch_name: string;
   service_name: string;
-  queue_name: string;
+  // Set once a counter calls the ticket, if that counter has a name.
+  counter_name: string | null;
   people_ahead: number;
 }
 
@@ -322,8 +323,15 @@ export default function CustomerPage({
             <p className="text-sm font-medium text-theme-text">Name: {ticket.customer_name}</p>
             <p className="text-sm font-medium text-theme-text">Branch: {ticket.branch_name}</p>
             <p className="text-sm font-medium text-theme-text">Service: {ticket.service_name}</p>
-            <p className="text-sm font-medium text-theme-text">Queue: {ticket.queue_name}</p>
           </div>
+
+          {ticket.status === "serving" && (
+            <div className="rounded-theme-lg bg-theme-secondary p-4 text-theme-on-secondary" role="status">
+              <p className="text-lg font-bold">
+                {ticket.counter_name ? `Please go to ${ticket.counter_name}` : "It's your turn"}
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-theme border border-theme-text/10 bg-theme-surface p-4 text-center">

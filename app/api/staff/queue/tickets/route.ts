@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateStaffRequest } from "@/lib/staff-auth";
-import { db } from "@/lib/db";
 import { isUuid } from "@/lib/staff-users";
 import { createTicket } from "@/lib/tickets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Staff issues a walk-in ticket for a service in their assigned queue.
+// Staff issues a walk-in ticket for a service their counter serves.
 export async function POST(request: NextRequest) {
   try {
     const staffUser = await authenticateStaffRequest(request);
     if (!staffUser) {
       return NextResponse.json({ error: "Staff authentication required." }, { status: 401 });
     }
-    if (!staffUser.queue_id) {
-      return NextResponse.json({ error: "No queue is assigned to your staff account." }, { status: 409 });
+    if (!staffUser.branch_id) {
+      return NextResponse.json({ error: "No branch is assigned to your counter." }, { status: 409 });
     }
 
     let body: unknown;
@@ -37,25 +36,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Provide a valid service ID." }, { status: 400 });
     }
 
-    const queueResult = await db.query<{ branch_id: string }>(
-      `SELECT q.branch_id
-       FROM staff_user_queues suq
-       JOIN queues q ON q.id = suq.queue_id AND q.tenant_code = suq.tenant_code
-       WHERE suq.staff_user_id = $1 AND suq.tenant_code = $2 AND suq.queue_id = $3`,
-      [staffUser.id, staffUser.tenant_code, staffUser.queue_id],
-    );
-    const branchId = queueResult.rows[0]?.branch_id;
-    if (!branchId) {
-      return NextResponse.json({ error: "No queue is assigned to your staff account." }, { status: 409 });
+    // The ticket joins the branch's shared waiting list, so any counter serving the service can call it.
+    if (!staffUser.service_ids.includes(serviceId)) {
+      return NextResponse.json({ error: "This service is not served at your counter." }, { status: 404 });
     }
 
     const ticket = await createTicket(
       staffUser.tenant_code,
-      { customer_name: customerName, branch_id: branchId, service_id: serviceId },
-      staffUser.queue_id,
+      { customer_name: customerName, branch_id: staffUser.branch_id, service_id: serviceId },
     );
     if (!ticket) {
-      return NextResponse.json({ error: "This service is not available in your queue." }, { status: 404 });
+      return NextResponse.json({ error: "This service is not served at your counter." }, { status: 404 });
     }
     return NextResponse.json({ ticket }, { status: 201 });
   } catch (error) {

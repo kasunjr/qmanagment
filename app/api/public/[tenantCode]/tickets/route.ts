@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const client = await db.connect();
     try {
       await client.query("BEGIN");
-      const ticket = await createTicket(tenantCode, validation.fields, undefined, client);
+      const ticket = await createTicket(tenantCode, validation.fields, client);
       if (!ticket) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "This service is not available at this branch." }, { status: 404 });

@@ -181,7 +181,7 @@ export default function WalkInTicketForm() {
             ) : servicesError ? (
               <p className="px-4 py-8 text-center text-sm text-red-600" role="alert">{servicesError}</p>
             ) : services.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-theme-text/60">No services are assigned to your queue.</p>
+              <p className="px-4 py-8 text-center text-sm text-theme-text/60">No services are assigned to your counter.</p>
             ) : filteredServices.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-theme-text/60">No services match "{search}".</p>
             ) : (
@@ -297,7 +297,7 @@ export default function WalkInTicketForm() {
           <div className="border-t border-theme-text/10 px-5 py-4 sm:px-7">
             <div className="flex items-center justify-between gap-4 rounded-theme border border-theme-secondary/40 bg-theme-secondary/10 p-4">
               <div className="min-w-0">
-                <p className="text-sm font-semibold">Ticket issued — added to the waiting queue</p>
+                <p className="text-sm font-semibold">Ticket issued — added to the waiting list</p>
                 <p className="truncate text-sm text-theme-text/80">
                   {latestTicket.customer_name} · {latestTicket.service_name}
                 </p>

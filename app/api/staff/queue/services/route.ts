@@ -5,26 +5,24 @@ import { db } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Services that resolve to the staff member's assigned queue, for walk-in tickets.
+// Services the staff member's counter serves, for walk-in tickets.
 export async function GET(request: NextRequest) {
   try {
     const staffUser = await authenticateStaffRequest(request);
     if (!staffUser) {
       return NextResponse.json({ error: "Staff authentication required." }, { status: 401 });
     }
-    if (!staffUser.queue_id) {
+    if (!staffUser.branch_id) {
       return NextResponse.json({ services: [] });
     }
 
     const result = await db.query<{ id: string; name: string; description: string; duration_minutes: number }>(
       `SELECT s.id, s.name, s.description, s.duration_minutes
-       FROM staff_user_queues suq
-       JOIN queues q ON q.id = suq.queue_id AND q.tenant_code = suq.tenant_code
-       JOIN queue_services qs ON qs.queue_id = q.id
-       JOIN services s ON s.id = qs.service_id AND s.tenant_code = q.tenant_code
-       WHERE suq.staff_user_id = $1 AND suq.tenant_code = $2 AND suq.queue_id = $3
+       FROM staff_user_services sus
+       JOIN services s ON s.id = sus.service_id AND s.tenant_code = $2
+       WHERE sus.staff_user_id = $1
        ORDER BY s.name, s.id`,
-      [staffUser.id, staffUser.tenant_code, staffUser.queue_id],
+      [staffUser.id, staffUser.tenant_code],
     );
     return NextResponse.json({ services: result.rows });
   } catch (error) {

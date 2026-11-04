@@ -62,48 +62,43 @@ Staff users are separate from account users. An authenticated account manages on
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /api/staff-users` | List staff users for the authenticated account's tenant, including `queue_id`. |
-| `POST /api/staff-users` | Create a staff user. Required JSON: `name`, `username`, `email`, `code`; `role` is optional and defaults to `Agent`. Optional `queue_id` assigns one tenant queue. |
-| `GET /api/staff-users/{id}` | Retrieve one staff user in the authenticated account's tenant, including `queue_id`. |
-| `PATCH /api/staff-users/{id}` | Update staff fields; send `code` only to replace the staff code. Optional `queue_id` replaces the assignment; pass `null` to clear it. |
+| `GET /api/staff-users` | List staff users for the authenticated account's tenant, including `branch_id`, `counter_name` and `service_ids`. |
+| `POST /api/staff-users` | Create a staff user. Required JSON: `name`, `username`, `email`, `code`; `role` is optional and defaults to `Agent`. Optional `branch_id`, `counter_name` (up to 60 characters; empty means none) and `service_ids` set up the counter. |
+| `GET /api/staff-users/{id}` | Retrieve one staff user in the authenticated account's tenant, including `branch_id`, `counter_name` and `service_ids`. |
+| `PATCH /api/staff-users/{id}` | Update staff fields; send `code` only to replace the staff code. Optional `branch_id` and `counter_name` (pass `null` to clear) and `service_ids` (replaces the list). |
 | `DELETE /api/staff-users/{id}` | Delete a staff user in the authenticated account's tenant. |
 | `POST /api/staff-auth/login` | Staff login. JSON body: `{"tenant_code":"75050B6","username":"agent1","code":"staff-code"}`. Tenant code and username must match. Success sets staff-only HttpOnly cookies. |
 | `GET /api/staff-auth/me` | Verify the staff session and return the safe staff profile. Accepts the staff cookie or a staff bearer token. |
-| `GET /api/staff/queue` | Return the authenticated staff member's assigned queue and today's tickets in that queue only. Returns `queue: null` and an empty ticket list when no queue is assigned. |
-| `GET /api/staff/queue/events` | Authenticated server-sent event stream. Sends `tickets-updated` only when a ticket is created in the staff member's assigned queue. |
-| `POST /api/staff/queue/next` | Call the longest-waiting ticket in the authenticated staff member's assigned queue by changing it from `waiting` to `serving`. Returns `409` if no queue or waiting ticket is available. |
-| `POST /api/staff/queue/complete` | Complete the current serving ticket and call the next waiting ticket in the assigned queue. Returns `409` if there is no serving ticket to complete. |
+| `GET /api/staff/queue` | Return the staff member's counter (`name`, `branch_name`, `services`) and today's tickets: the branch's waiting tickets for the counter's services, plus the counter's own serving and completed tickets. Returns `counter: null` and an empty ticket list when no branch is assigned. |
+| `GET /api/staff/queue/events` | Authenticated server-sent event stream. Sends `tickets-updated` when a ticket in the staff member's branch is created, called or completed. |
+| `POST /api/staff/queue/next` | Call the longest-waiting ticket in the counter's branch among the services it serves, changing it from `waiting` to `serving` and recording the counter. Returns `409` if the counter has no branch, is already serving, or no ticket is waiting. |
+| `POST /api/staff/queue/complete` | Complete the counter's serving ticket and call its next waiting ticket. Returns `409` if the counter has no serving ticket. |
 | `POST /api/staff-auth/logout` | Clear only the staff authentication and tenant cookies. |
 
 Staff JWTs use `JWT_STAFF_ACCESS_SECRET`, a separate issuer/audience, and an 8-hour lifetime. Account tokens cannot authenticate staff sessions, and staff tokens cannot authenticate account endpoints. `/staff/{tenantCode}` is the tenant-specific staff login page. Successful login redirects to `/staff`, which is protected by middleware; without a valid staff JWT, requests are redirected to the remembered tenant login page or `/` if no tenant is known. The shared navbar hides the Admin Portal/account controls on staff routes and shows staff logout only for a verified staff session.
 
-The staff login and `/api/staff-auth/me` responses also include the assigned `queue_id` (or `null`). A queue can be assigned to only one staff user, and a staff user can be assigned to only one queue. The API and database enforce tenant boundaries and unique queue ownership.
+The staff login and `/api/staff-auth/me` responses also include `branch_id`, `counter_name` and `service_ids`. A staff user is a counter: it belongs to one branch and serves any number of services, and a service can be served by any number of counters. The API enforces tenant boundaries, and the database allows a counter only one serving ticket at a time.
 
-The admin staff-user screen uses these endpoints. The staff counter page reads the assigned queue and its current-day tickets from `GET /api/staff/queue`, refreshes immediately on `tickets-updated` events, calls the longest-waiting customer with `POST /api/staff/queue/next`, and completes the serving ticket while advancing the queue with `POST /api/staff/queue/complete`.
+The admin staff-user screen uses these endpoints. The staff counter page reads the counter and its current-day tickets from `GET /api/staff/queue`, refreshes immediately on `tickets-updated` events, calls the longest-waiting customer with `POST /api/staff/queue/next`, and completes the serving ticket while calling the next with `POST /api/staff/queue/complete`. Two counters calling at the same moment never get the same ticket.
 
-### Branches, Services and Queues
+### Branches and Services
 
 These routes back the admin Configurations tab. All of them require the account access token in `Authorization: Bearer <account-access-token>` and only see rows matching the account's `tenant_code`. A duplicate returns `409`; an ID from another tenant returns `404`.
 
-- Branches and services are tenant-wide. There is no branch-to-service link: every branch offers every service.
-- Queues belong to a branch. A new branch has no queues; the admin creates them with any name.
-- A new queue has no services; the admin adds them with "Add service". Within a branch a service belongs to at most one queue, stored in `queue_services`. A service that is not in a queue in a branch cannot be booked there.
+- Branches and services are tenant-wide. There are no queues.
+- Counters are staff users (see above). Each has a branch and the services it serves, stored in `staff_user_services`.
+- A service can be booked at a branch only when at least one counter in that branch serves it. Its tickets wait in one virtual queue per branch and service, and any of those counters can call them.
 
 | Method and path | Purpose |
 | --- | --- |
 | `GET /api/branches` | List the tenant's branches. |
-| `POST /api/branches` | Create a branch (with no queues). Body: `{"name":"Downtown","code":"DT01"}`. `code` is unique per tenant and stored uppercase. |
+| `POST /api/branches` | Create a branch. Body: `{"name":"Downtown","code":"DT01"}`. `code` is unique per tenant and stored uppercase. |
 | `PATCH /api/branches/{id}` | Update `name` and/or `code`. |
-| `DELETE /api/branches/{id}` | Delete a branch, with its queues, service assignments and tickets. |
+| `DELETE /api/branches/{id}` | Delete a branch, with its tickets. Its staff users are kept with no branch. |
 | `GET /api/services` | List the tenant's services. |
 | `POST /api/services` | Create a service. Body: `{"name":"Loans","description":"Personal and home loans","duration_minutes":20}`; `description` is optional (up to 500 characters, default empty) and `duration_minutes` is optional (1-1440, default 15). `name` is unique per tenant. |
 | `PATCH /api/services/{id}` | Update `name`, `description` and/or `duration_minutes`. |
-| `DELETE /api/services/{id}` | Delete a service, with its queue assignments and tickets. |
-| `GET /api/queues` | List the tenant's queues, each with the `service_ids` it holds. Optional `?branch_id={id}` filter. |
-| `POST /api/queues` | Create a queue with no services. Body: `{"name":"Loans Queue","branch_id":"<branch id>"}`. `name` is unique per branch. |
-| `PATCH /api/queues/{id}` | Rename a queue. Body: `{"name":"New name"}`. |
-| `DELETE /api/queues/{id}` | Delete a queue, with its tickets and staff assignment. Its services are removed from it and become unassigned in that branch. |
-| `PUT /api/queues/{id}/services/{serviceId}` | Add a service to this queue, moving it out of any other queue in that branch. No body. |
+| `DELETE /api/services/{id}` | Delete a service, with its counter assignments and tickets. |
 
 ### Customer Portal (Public)
 
@@ -111,18 +106,18 @@ These routes need no login. The tenant is identified by the 7-character tenant c
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /api/public/{tenantCode}/booking-options` | Bookable branches (`id`, `name`, `code`, `service_ids`) and services (`id`, `name`, `description`, `duration_minutes`) a customer can choose from. A branch is listed only if at least one service is in a queue there; its `service_ids` are the services bookable at that branch. |
-| `POST /api/public/{tenantCode}/tickets` | Create a ticket. Body: `{"customer_name":"John Doe","branch_id":"<branch id>","service_id":"<service id>"}`. Returns `201` with the ticket; `400` for invalid input; `404` if the branch or service is not in the tenant, or the service is not in a queue in that branch. |
+| `GET /api/public/{tenantCode}/booking-options` | Bookable branches (`id`, `name`, `code`, `service_ids`) and services (`id`, `name`, `description`, `duration_minutes`) a customer can choose from. A branch is listed only if at least one of its counters serves a service; its `service_ids` are the services bookable at that branch. |
+| `POST /api/public/{tenantCode}/tickets` | Create a ticket. Body: `{"customer_name":"John Doe","branch_id":"<branch id>","service_id":"<service id>"}`. Returns `201` with the ticket; `400` for invalid input; `404` if the branch or service is not in the tenant, or no counter in that branch serves the service. |
 | `GET /api/public/{tenantCode}/tickets/{ticketId}` | Current state of a ticket created today. Returns `404` for an unknown ticket or one from a previous day. |
 
-A ticket response contains `id`, `ticket_number`, `customer_name`, `status`, `branch_name`, `service_name`, `queue_name`, `people_ahead` and `created_at`.
+A ticket response contains `id`, `ticket_number`, `customer_name`, `status`, `branch_name`, `service_name`, `counter_name`, `people_ahead` and `created_at`.
 
 - **Number**: one running number per branch that restarts each day, taken from `ticket_counters`. The customer page shows it padded to three digits (`001`).
-- **Queue**: chosen by the server from the branch and service: the queue the service is assigned to in that branch.
-- **Status**: `waiting`, `serving` or `completed`. New tickets are `waiting`. Nothing sets the other two yet; that belongs to the staff counter work.
-- **People ahead**: waiting tickets in the same queue on the same day with a lower number.
+- **Counter**: no counter is chosen at booking. `counter_name` is copied from the counter that calls the ticket, and is `null` while waiting or if that counter has no name.
+- **Status**: `waiting`, `serving` or `completed`. New tickets are `waiting`; a counter's call sets `serving`, and completing sets `completed`.
+- **People ahead**: waiting tickets for the same service at the same branch on the same day with a lower number.
 
-The customer page at `/customer/{tenantCode}` stores the ticket in the browser's local storage under `qms_ticket_{tenantCode}` so it survives a reload. On load it refreshes the ticket from the server; a ticket that is completed, missing or from a previous day is removed from local storage. "Book Another Ticket" is shown only for a completed ticket.
+The customer page at `/customer/{tenantCode}` stores the ticket in the browser's local storage under `qms_ticket_{tenantCode}` so it survives a reload. On load it refreshes the ticket from the server; a ticket that is completed, missing or from a previous day is removed from local storage. It does not refresh on its own; a called ticket shows "Please go to {counter name}" after a reload. "Book Another Ticket" is shown only for a completed ticket.
 
 The ticket routes are public and not rate limited: anyone with the tenant link can create tickets.
 
@@ -172,9 +167,6 @@ app/
   api/branches/[id]/route.ts  Branch update and deletion
   api/services/route.ts       Tenant-scoped service list and creation
   api/services/[id]/route.ts  Service update and deletion
-  api/queues/route.ts         Tenant-scoped queue list and creation
-  api/queues/[id]/route.ts    Queue rename and deletion
-  api/queues/[id]/services/[serviceId]/route.ts  Move a service into a queue
   api/public/[tenantCode]/booking-options/route.ts  Public branches and services for booking
   api/public/[tenantCode]/tickets/route.ts          Public ticket creation
   api/public/[tenantCode]/tickets/[ticketId]/route.ts  Public ticket status
@@ -184,7 +176,7 @@ app/
   signup/page.tsx             Signup page
   admin/page.tsx       Admin portal: QR codes, configuration, and analytics UI
   pricing/page.tsx     Static pricing plans
-  staff/page.tsx       Staff queue and counter controls
+  staff/page.tsx       Staff counter controls
   globals.css          Global styles and Tailwind directives
   layout.tsx           Root layout, metadata, navigation, and shared page shell
   page.tsx             Home page and links to the main portals
@@ -196,19 +188,19 @@ middleware.ts          JWT checks for /admin and the /staff counter
 lib/
   auth.ts              Password, JWT, refresh-token, and request auth helpers
   staff-auth.ts        Separate staff JWT, code verification, cookies, and request auth
-  staff-users.ts       Staff user validation and data types
+  staff-users.ts       Staff user (counter) validation, data types, and service assignment
   branches.ts          Branch validation and data types
   services.ts          Service validation and data types
-  queues.ts            Queue validation, data types, and the service-to-queue rule
-  tickets.ts           Ticket validation, creation, and lookup
+  tickets.ts           Ticket validation, creation, lookup, and counter calling
   db.ts                Shared PostgreSQL connection pool
 migrations/
   001_auth.sql         Users, tenant codes, and refresh-token tables
   003_staff_users.sql  Tenant-scoped staff users and hashed login codes
   004_branches.sql     Tenant-scoped branches
   005_services.sql     Tenant-scoped services
-  006_queues.sql       Per-branch queues and service assignments
+  006_queues.sql       Per-branch queues (removed by 018)
   007_tickets.sql      Tickets and per-branch daily ticket counters
+  018_counters_replace_queues.sql  Staff counters with branch and services; drops queues
 scripts/
   migrate.mjs          Applies pending SQL migrations
 package.json           Scripts and dependency definitions
@@ -236,7 +228,7 @@ The application uses the Next.js App Router. Each folder under `app/` maps to a 
 - Put reusable UI in `components/`; the shared navigation is in `components/Navbar.tsx`.
 - Most styling uses Tailwind utility classes. Global CSS and Tailwind directives are in `app/globals.css`; Tailwind scans the `app/` and `components/` trees.
 - Pages that use React state, event handlers, or browser APIs should be client components and start with the `"use client"` directive.
-- Account auth, staff-user management, staff authentication, branch/service/queue configuration, and customer tickets use PostgreSQL. The staff counter page still uses local React state and sample data; counter operations are not yet persisted.
+- Account auth, staff-user management, staff authentication, branch/service/counter configuration, and customer tickets use PostgreSQL.
 - The home page still links to `/customer`, which no longer exists; the customer portal is only reachable at `/customer/{tenantCode}`.
 - Use the existing dependencies where possible: `lucide-react` for icons and `qrcode.react` for QR code rendering.
 - Before sharing changes, run `npm run build` from the project root. It performs the production build and Next.js lint/type checks. The current `npm run lint` command opens interactive ESLint setup because no ESLint configuration is checked in.

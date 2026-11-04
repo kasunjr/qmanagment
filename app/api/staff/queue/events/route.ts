@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { Client } from "pg";
 import { DAILY_LIMIT_CHANNEL } from "@/lib/plans";
 import { authenticateStaffRequest } from "@/lib/staff-auth";
+import { BRANCH_TICKETS_CHANNEL } from "@/lib/tickets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,14 +14,15 @@ export async function GET(request: NextRequest) {
   if (!staffUser) {
     return new Response("Staff authentication required.", { status: 401 });
   }
-  if (!staffUser.queue_id) {
+  if (!staffUser.branch_id) {
     return new Response(null, { status: 204 });
   }
+  const branchId = staffUser.branch_id;
 
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   try {
     await client.connect();
-    await client.query("LISTEN queue_ticket_created");
+    await client.query(`LISTEN ${BRANCH_TICKETS_CHANNEL}`);
     await client.query(`LISTEN ${DAILY_LIMIT_CHANNEL}`);
   } catch (error) {
     await client.end().catch(() => {});
@@ -52,7 +54,8 @@ export async function GET(request: NextRequest) {
   const onAbort = () => void close();
   const onNotification = (notification: { channel?: string; payload?: string }) => {
     let event: string;
-    if (notification.channel === "queue_ticket_created" && notification.payload === staffUser.queue_id) {
+    // Any ticket created, called or completed in the branch can change this counter's lists.
+    if (notification.channel === BRANCH_TICKETS_CHANNEL && notification.payload === branchId) {
       event = "tickets-updated";
     } else if (notification.channel === DAILY_LIMIT_CHANNEL && notification.payload === staffUser.tenant_code) {
       event = "daily-limit-changed";

@@ -5,10 +5,12 @@ import WalkInTicketForm from "@/components/WalkInTicketForm";
 import { DEFAULT_APP_THEME, themeStyle, type AppTheme } from "@/lib/theme-style";
 import { AlertTriangle, CheckCircle, Clock3, Play, UserCheck } from "lucide-react";
 
-interface AssignedQueue {
-  id: string;
-  name: string;
+// This staff member's counter. Waiting tickets are shared with other counters in the branch
+// that serve the same services; serving and completed tickets are this counter's own.
+interface Counter {
+  name: string | null;
   branch_name: string;
+  services: { id: string; name: string }[];
 }
 
 interface QueueTicket {
@@ -20,8 +22,8 @@ interface QueueTicket {
   created_at: string;
 }
 
-interface QueueResponse {
-  queue: AssignedQueue | null;
+interface CounterResponse {
+  counter: Counter | null;
   tickets: QueueTicket[];
   daily_limit_reached?: boolean;
   error?: string;
@@ -33,7 +35,7 @@ function formatWaitTime(createdAt: string): string {
 }
 
 export default function StaffPage() {
-  const [queue, setQueue] = useState<AssignedQueue | null>(null);
+  const [counter, setCounter] = useState<Counter | null>(null);
   const [tickets, setTickets] = useState<QueueTicket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -45,6 +47,8 @@ export default function StaffPage() {
   const servingTicket = tickets.find((ticket) => ticket.status === "serving");
   const waitingTickets = tickets.filter((ticket) => ticket.status === "waiting");
   const completedTickets = tickets.filter((ticket) => ticket.status === "completed");
+  const counterLabel = counter ? `${counter.branch_name} · ${counter.name ?? "Unnamed counter"}` : "";
+  const hasServices = Boolean(counter?.services.length);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -74,35 +78,37 @@ export default function StaffPage() {
   useEffect(() => {
     const controller = new AbortController();
 
-    const loadQueue = async () => {
+    const loadCounter = async () => {
       try {
         const response = await fetch("/api/staff/queue", {
           cache: "no-store",
           signal: controller.signal,
         });
-        const result = (await response.json().catch(() => null)) as QueueResponse | null;
+        const result = (await response.json().catch(() => null)) as CounterResponse | null;
         if (!response.ok || !result) {
-          throw new Error(result?.error || "Unable to load assigned queue.");
+          throw new Error(result?.error || "Unable to load your counter.");
         }
-        setQueue(result.queue);
+        setCounter(result.counter);
         setTickets(result.tickets);
         setDailyLimitReached(result.daily_limit_reached === true);
         setError("");
       } catch (loadError) {
         if (!controller.signal.aborted) {
-          setError(loadError instanceof Error ? loadError.message : "Unable to load assigned queue.");
+          setError(loadError instanceof Error ? loadError.message : "Unable to load your counter.");
         }
       } finally {
         if (!controller.signal.aborted) setIsLoading(false);
       }
     };
 
-    void loadQueue();
+    void loadCounter();
+    // Fires when any ticket in the branch is created, called or completed, so tickets called
+    // by another counter leave this waiting list straight away.
     const events = new EventSource("/api/staff/queue/events");
-    events.addEventListener("open", () => void loadQueue());
-    events.addEventListener("tickets-updated", () => void loadQueue());
-    events.addEventListener("daily-limit-changed", () => void loadQueue());
-    const refreshInterval = window.setInterval(() => void loadQueue(), 60_000);
+    events.addEventListener("open", () => void loadCounter());
+    events.addEventListener("tickets-updated", () => void loadCounter());
+    events.addEventListener("daily-limit-changed", () => void loadCounter());
+    const refreshInterval = window.setInterval(() => void loadCounter(), 60_000);
     return () => {
       controller.abort();
       events.close();
@@ -111,7 +117,7 @@ export default function StaffPage() {
   }, []);
 
   const callNext = async () => {
-    if (!queue || servingTicket || isCallingNext) return;
+    if (!counter || servingTicket || isCallingNext) return;
 
     setIsCallingNext(true);
     setCallError("");
@@ -135,7 +141,7 @@ export default function StaffPage() {
   };
 
   const completeServing = async () => {
-    if (!queue || !servingTicket || isCompleting) return;
+    if (!counter || !servingTicket || isCompleting) return;
 
     setIsCompleting(true);
     setCallError("");
@@ -177,12 +183,15 @@ export default function StaffPage() {
           </div>
           <div className="min-w-0">
             <h1 className="truncate text-2xl font-bold">Staff counter</h1>
-            <p className="truncate text-sm text-theme-text/60">
-              {queue ? `${queue.branch_name} · ${queue.name}` : "Assigned queue"}
-            </p>
+            <p className="truncate text-sm text-theme-text/60">{counter ? counterLabel : "Your counter"}</p>
+            {counter && (
+              <p className="truncate text-xs text-theme-text/50">
+                Serves: {counter.services.map((service) => service.name).join(", ") || "No services"}
+              </p>
+            )}
           </div>
         </div>
-        {queue && (
+        {hasServices && (
           <div className="flex items-center gap-2 rounded-full border border-theme-text/20 bg-theme-surface px-3 py-1.5 text-sm font-semibold">
             <span className="h-2 w-2 rounded-full bg-amber-400" />
             {waitingTickets.length} waiting
@@ -192,24 +201,29 @@ export default function StaffPage() {
 
       {error && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
       {callError && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{callError}</p>}
-      {queue && dailyLimitReached && (
+      {hasServices && dailyLimitReached && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800" role="status">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
           <div>
             <p className="font-semibold">Today&apos;s ticket limit has been reached.</p>
             <p className="mt-0.5">
-              Customers can&apos;t book new tickets until tomorrow. You can still serve the tickets already in your queue.
+              Customers can&apos;t book new tickets until tomorrow. You can still serve the tickets already waiting.
             </p>
           </div>
         </div>
       )}
 
       {isLoading ? (
-        <p className="py-10 text-center text-sm text-theme-text/60" role="status">Loading assigned queue...</p>
-      ) : !queue ? (
+        <p className="py-10 text-center text-sm text-theme-text/60" role="status">Loading your counter...</p>
+      ) : !counter ? (
         <div className="border-y border-theme-text/10 py-12 text-center">
-          <p className="text-lg font-semibold">No queue assigned</p>
-          <p className="mt-1 text-sm text-theme-text/60">Ask an administrator to assign a queue to your staff account.</p>
+          <p className="text-lg font-semibold">No branch assigned</p>
+          <p className="mt-1 text-sm text-theme-text/60">Ask an administrator to assign a branch to your counter.</p>
+        </div>
+      ) : !hasServices ? (
+        <div className="border-y border-theme-text/10 py-12 text-center">
+          <p className="text-lg font-semibold">No services assigned</p>
+          <p className="mt-1 text-sm text-theme-text/60">Ask an administrator to choose the services your counter serves.</p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -223,7 +237,7 @@ export default function StaffPage() {
                   <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-theme-on-secondary" />
                   <h2 id="serving-ticket-title">Now serving</h2>
                 </div>
-                <span className="text-sm text-theme-on-secondary/80">{queue.branch_name} · {queue.name}</span>
+                <span className="text-sm text-theme-on-secondary/80">{counterLabel}</span>
               </div>
               <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(180px,0.7fr)_minmax(0,1.5fr)_auto] lg:items-center">
                 <p className="text-6xl font-extrabold leading-none sm:text-7xl">
@@ -250,7 +264,7 @@ export default function StaffPage() {
               <div>
                 <p className="text-sm font-bold uppercase text-theme-text/60">No active customer</p>
                 <p className="mt-1 text-xl font-semibold">
-                  {waitingTickets.length ? "Ready to call the next ticket" : "Queue is clear"}
+                  {waitingTickets.length ? "Ready to call the next ticket" : "No one is waiting"}
                 </p>
               </div>
               <button
@@ -270,8 +284,10 @@ export default function StaffPage() {
           <section aria-labelledby="waiting-list-title">
             <div className="mb-3 flex items-end justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold" id="waiting-list-title">Waiting queue</h2>
-                <p className="text-sm text-theme-text/60">First in line is called next</p>
+                <h2 className="text-lg font-bold" id="waiting-list-title">Waiting customers</h2>
+                <p className="text-sm text-theme-text/60">
+                  For your services, shared with other counters. The longest waiting is called next.
+                </p>
               </div>
               <span className="text-sm font-semibold text-theme-text/60">{waitingTickets.length} tickets</span>
             </div>

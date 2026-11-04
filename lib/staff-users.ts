@@ -1,5 +1,7 @@
+import type { PoolClient } from "pg";
 import { normalizeEmail } from "@/lib/auth";
 
+// A staff user is a counter: it belongs to one branch and serves the services in service_ids.
 export interface StaffUserRecord {
   id: string;
   tenant_code: string;
@@ -7,7 +9,9 @@ export interface StaffUserRecord {
   username: string;
   email: string;
   role: string;
-  queue_id: string | null;
+  branch_id: string | null;
+  counter_name: string | null;
+  service_ids: string[];
   created_at: Date;
   updated_at: Date;
 }
@@ -18,16 +22,17 @@ export interface StaffUserFields {
   email?: string;
   role?: string;
   code?: string;
-  queue_id?: string | null;
+  branch_id?: string | null;
+  counter_name?: string | null;
+  service_ids?: string[];
 }
 
 export const staffUserColumns =
-  "id, tenant_code, name, username, email, role, created_at, updated_at";
-export const staffUserColumnsWithQueue = `${staffUserColumns}, (
-  SELECT suq.queue_id
-  FROM staff_user_queues suq WHERE suq.staff_user_id = staff_users.id
-  LIMIT 1
-) AS queue_id`;
+  "id, tenant_code, name, username, email, role, branch_id, counter_name, created_at, updated_at";
+export const staffUserColumnsWithServices = `${staffUserColumns}, COALESCE((
+  SELECT array_agg(sus.service_id ORDER BY sus.service_id)
+  FROM staff_user_services sus WHERE sus.staff_user_id = staff_users.id
+), '{}') AS service_ids`;
 
 export function validateStaffUserFields(
   value: unknown,
@@ -70,11 +75,33 @@ export function validateStaffUserFields(
     fields.role = "Agent";
   }
 
-  if (has("queue_id")) {
-    if (body.queue_id !== null && (typeof body.queue_id !== "string" || !isUuid(body.queue_id))) {
-      return { error: "Queue ID must be a valid queue ID or null." };
+  if (has("branch_id")) {
+    if (body.branch_id !== null && (typeof body.branch_id !== "string" || !isUuid(body.branch_id))) {
+      return { error: "Branch ID must be a valid branch ID or null." };
     }
-    fields.queue_id = body.queue_id as string | null;
+    fields.branch_id = body.branch_id as string | null;
+  }
+
+  // An empty counter name is stored as null.
+  if (has("counter_name")) {
+    if (body.counter_name !== null && typeof body.counter_name !== "string") {
+      return { error: "Counter name must be text or null." };
+    }
+    const counterName = typeof body.counter_name === "string" ? body.counter_name.trim() : "";
+    if (counterName.length > 60) {
+      return { error: "Counter name must be at most 60 characters." };
+    }
+    fields.counter_name = counterName || null;
+  }
+
+  if (has("service_ids")) {
+    if (
+      !Array.isArray(body.service_ids) ||
+      !body.service_ids.every((id) => typeof id === "string" && isUuid(id))
+    ) {
+      return { error: "Service IDs must be a list of valid service IDs." };
+    }
+    fields.service_ids = Array.from(new Set(body.service_ids as string[]));
   }
 
   if (!partial || has("code")) {
@@ -99,7 +126,45 @@ export function isUniqueViolation(error: unknown): boolean {
   return !!error && typeof error === "object" && "code" in error && error.code === "23505";
 }
 
-export function isStaffQueueAssignmentConflict(error: unknown): boolean {
-  return !!error && typeof error === "object" && "constraint" in error &&
-    error.constraint === "staff_user_queues_one_staff_per_queue_idx";
+export function isForeignKeyViolation(error: unknown): boolean {
+  return !!error && typeof error === "object" && "code" in error && error.code === "23503";
+}
+
+// Returns an error message when the branch or a service is not in the tenant.
+export async function checkStaffAssignment(
+  client: PoolClient,
+  tenantCode: string,
+  branchId: string | null | undefined,
+  serviceIds: string[] | undefined,
+): Promise<string | null> {
+  if (branchId) {
+    const branchResult = await client.query(
+      "SELECT 1 FROM branches WHERE id = $1 AND tenant_code = $2",
+      [branchId, tenantCode],
+    );
+    if (!branchResult.rowCount) return "Branch was not found in this tenant.";
+  }
+  if (serviceIds?.length) {
+    const serviceResult = await client.query<{ count: number }>(
+      "SELECT COUNT(*)::int AS count FROM services WHERE tenant_code = $1 AND id = ANY($2::uuid[])",
+      [tenantCode, serviceIds],
+    );
+    if (serviceResult.rows[0].count !== serviceIds.length) return "A service was not found in this tenant.";
+  }
+  return null;
+}
+
+export async function replaceStaffUserServices(
+  client: PoolClient,
+  staffUserId: string,
+  serviceIds: string[],
+): Promise<void> {
+  await client.query("DELETE FROM staff_user_services WHERE staff_user_id = $1", [staffUserId]);
+  if (serviceIds.length) {
+    await client.query(
+      `INSERT INTO staff_user_services (staff_user_id, service_id)
+       SELECT $1, unnest($2::uuid[])`,
+      [staffUserId, serviceIds],
+    );
+  }
 }

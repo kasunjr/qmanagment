@@ -16,7 +16,6 @@ function planFeatures({ limits }: PlanRecord): string[] {
   return [
     limitText(limits.branches, "branch", "branches"),
     limitText(limits.services, "service", "services"),
-    limitText(limits.queues, "queue", "queues"),
     limitText(limits.staff_users, "staff member", "staff members"),
     limits.tickets_per_day === null
       ? "Unlimited tickets"

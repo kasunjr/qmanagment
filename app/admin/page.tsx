@@ -37,19 +37,15 @@ interface Service {
   description: string;
   duration_minutes: number;
 }
-interface Queue {
-  id: string;
-  name: string;
-  branch_id: string;
-  service_ids: string[];
-}
 interface Staff {
   id: string;
   name: string;
   username: string;
   email: string;
   role: string;
-  queue_id: string | null;
+  branch_id: string | null;
+  counter_name: string | null;
+  service_ids: string[];
 }
 
 interface AnalyticsData {
@@ -115,7 +111,7 @@ function PlanExpiredBanner({ subscription, planName }: {
             Your {subscription.plan_name} plan {ended}.
           </p>
           <p className="mt-0.5 text-red-800">
-            Your account is now on the {planName} plan and its limits apply. Existing branches, queues and staff
+            Your account is now on the {planName} plan and its limits apply. Existing branches, services and staff
             are kept, but you can&apos;t add more until you renew.
           </p>
         </div>
@@ -287,7 +283,7 @@ function AdminDashboard() {
   };
 
   const [configSubTab, setConfigSubTab] = useState<
-    "branches" | "services" | "queues" | "staff"
+    "branches" | "services" | "staff"
   >("branches");
 
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -303,26 +299,6 @@ function AdminDashboard() {
   const [serviceForm, setServiceForm] = useState({ name: "", description: "", duration: "15" });
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [serviceEdit, setServiceEdit] = useState({ name: "", description: "", duration: "" });
-
-  const [queues, setQueues] = useState<Queue[]>([]);
-  const [isQueuesLoading, setIsQueuesLoading] = useState(false);
-  const [isSavingQueue, setIsSavingQueue] = useState(false);
-  const [queueError, setQueueError] = useState("");
-  const [queueName, setQueueName] = useState("");
-  const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
-  const [queueEditName, setQueueEditName] = useState("");
-  const [addingServiceQueueId, setAddingServiceQueueId] = useState<
-    string | null
-  >(null);
-  const [serviceToAdd, setServiceToAdd] = useState("");
-  const [isAssigningService, setIsAssigningService] = useState(false);
-  const [selectedBranchId, setSelectedBranchId] = useState("");
-  // Falls back to the first branch until one is picked, or if the picked one was deleted.
-  const queueBranch =
-    branches.find((branch) => branch.id === selectedBranchId) ?? branches[0];
-  const branchQueues = queues.filter(
-    (queue) => queue.branch_id === queueBranch?.id,
-  );
 
   const [staff, setStaff] = useState<Staff[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -384,7 +360,9 @@ function AdminDashboard() {
     email: "",
     code: "",
     role: "",
-    queue_id: null as string | null,
+    branch_id: null as string | null,
+    counter_name: "",
+    service_ids: [] as string[],
   });
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
   const [branchEdit, setBranchEdit] = useState<Partial<Branch>>({});
@@ -542,7 +520,7 @@ function AdminDashboard() {
   const deleteBranch = async (branch: Branch) => {
     if (
       !accessToken ||
-      !window.confirm(`Delete ${branch.name}? Its queues will be deleted too.`)
+      !window.confirm(`Delete ${branch.name}? Its tickets will be deleted, and its staff users will have no branch.`)
     )
       return;
     setBranchError("");
@@ -679,187 +657,6 @@ function AdminDashboard() {
     }
   };
 
-  // Reloads when branches or services change: a new branch brings a default queue,
-  // and services appear in or leave the default queues.
-  useEffect(() => {
-    if (!accessToken) return;
-    const controller = new AbortController();
-
-    const loadQueues = async () => {
-      setIsQueuesLoading(true);
-      setQueueError("");
-      try {
-        const response = await fetch("/api/queues", {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const result = (await response.json().catch(() => null)) as {
-          queues?: Queue[];
-          error?: string;
-        } | null;
-        if (!response.ok)
-          throw new Error(result?.error || "Unable to load queues.");
-        setQueues(result?.queues ?? []);
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setQueueError(
-            error instanceof Error ? error.message : "Unable to load queues.",
-          );
-        }
-      } finally {
-        if (!controller.signal.aborted) setIsQueuesLoading(false);
-      }
-    };
-
-    void loadQueues();
-    return () => controller.abort();
-  }, [accessToken, branches, services]);
-
-  const addQueue = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!accessToken || !queueBranch) return;
-
-    setIsSavingQueue(true);
-    setQueueError("");
-    try {
-      const response = await fetch("/api/queues", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: queueName.trim(),
-          branch_id: queueBranch.id,
-        }),
-      });
-      const result = (await response.json().catch(() => null)) as {
-        queue?: Queue;
-        error?: string;
-      } | null;
-      if (!response.ok || !result?.queue) {
-        throw new Error(result?.error || "Unable to create queue.");
-      }
-
-      setQueues((currentQueues) => [...currentQueues, result.queue!]);
-      setQueueName("");
-      void loadUsage();
-    } catch (error) {
-      setQueueError(
-        error instanceof Error ? error.message : "Unable to create queue.",
-      );
-    } finally {
-      setIsSavingQueue(false);
-    }
-  };
-
-  const deleteQueue = async (queue: Queue) => {
-    if (!accessToken || !window.confirm(`Delete ${queue.name}?`)) return;
-    setQueueError("");
-    try {
-      const response = await fetch(`/api/queues/${queue.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const result = (await response.json().catch(() => null)) as {
-        error?: string;
-      } | null;
-      if (!response.ok)
-        throw new Error(result?.error || "Unable to delete queue.");
-      setQueues((currentQueues) =>
-        currentQueues.filter((item) => item.id !== queue.id),
-      );
-      void loadUsage();
-    } catch (error) {
-      setQueueError(
-        error instanceof Error ? error.message : "Unable to delete queue.",
-      );
-    }
-  };
-
-  const renameQueue = async (queue: Queue) => {
-    if (!accessToken) return;
-
-    setIsSavingQueue(true);
-    setQueueError("");
-    try {
-      const response = await fetch(`/api/queues/${queue.id}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name: queueEditName.trim() }),
-      });
-      const result = (await response.json().catch(() => null)) as {
-        queue?: Queue;
-        error?: string;
-      } | null;
-      if (!response.ok || !result?.queue) {
-        throw new Error(result?.error || "Unable to update queue.");
-      }
-
-      setQueues((currentQueues) =>
-        currentQueues.map((item) =>
-          item.id === queue.id ? result.queue! : item,
-        ),
-      );
-      setEditingQueueId(null);
-    } catch (error) {
-      setQueueError(
-        error instanceof Error ? error.message : "Unable to update queue.",
-      );
-    } finally {
-      setIsSavingQueue(false);
-    }
-  };
-
-  const addServiceToQueue = async (queue: Queue, serviceId: string) => {
-    if (!accessToken || !serviceId) return;
-
-    setIsAssigningService(true);
-    setQueueError("");
-    try {
-      const response = await fetch(
-        `/api/queues/${queue.id}/services/${serviceId}`,
-        {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${accessToken}` },
-        },
-      );
-      const result = (await response.json().catch(() => null)) as {
-        queue?: Queue;
-        error?: string;
-      } | null;
-      if (!response.ok || !result?.queue) {
-        throw new Error(result?.error || "Unable to add service to queue.");
-      }
-
-      // A service has one queue per branch, so it leaves the branch's other queues.
-      setQueues((currentQueues) =>
-        currentQueues.map((item) => {
-          if (item.id === queue.id) return result.queue!;
-          if (item.branch_id !== queue.branch_id) return item;
-          return {
-            ...item,
-            service_ids: item.service_ids.filter((id) => id !== serviceId),
-          };
-        }),
-      );
-      setAddingServiceQueueId(null);
-      setServiceToAdd("");
-    } catch (error) {
-      setQueueError(
-        error instanceof Error
-          ? error.message
-          : "Unable to add service to queue.",
-      );
-    } finally {
-      setIsAssigningService(false);
-    }
-  };
-
   const resetStaffForm = () => {
     setStaffForm({
       name: "",
@@ -867,7 +664,9 @@ function AdminDashboard() {
       email: "",
       code: "",
       role: "",
-      queue_id: null,
+      branch_id: null,
+      counter_name: "",
+      service_ids: [],
     });
     setEditingStaffId(null);
   };
@@ -883,7 +682,9 @@ function AdminDashboard() {
       username: staffForm.username.trim(),
       email: staffForm.email.trim(),
       role: staffForm.role.trim(),
-      queue_id: staffForm.queue_id,
+      branch_id: staffForm.branch_id,
+      counter_name: staffForm.counter_name.trim() || null,
+      service_ids: staffForm.service_ids,
     };
     if (staffForm.code) payload.code = staffForm.code;
 
@@ -1078,7 +879,7 @@ function AdminDashboard() {
         {activeTab === "config" && (
           <div>
             <div className="flex space-x-2 mb-6 border-b border-slate-200 pb-2">
-              {(["branches", "services", "queues", "staff"] as const).map(
+              {(["branches", "services", "staff"] as const).map(
                 (cat) => (
                   <button
                     key={cat}
@@ -1086,7 +887,6 @@ function AdminDashboard() {
                       setConfigSubTab(cat);
                       setEditingBranchId(null);
                       setEditingServiceId(null);
-                      setEditingQueueId(null);
                     }}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition ${
                       configSubTab === cat
@@ -1443,234 +1243,6 @@ function AdminDashboard() {
               </div>
             )}
 
-            {configSubTab === "queues" && (
-              <div>
-                {!queueBranch ? (
-                  <p className="text-sm text-slate-500">
-                    {isBranchesLoading
-                      ? "Loading branches..."
-                      : "Create a branch first. Each branch gets a default queue automatically."}
-                  </p>
-                ) : (
-                  <>
-                    <label className="mb-6 block max-w-xl space-y-1.5 text-sm font-medium text-slate-700">
-                      Branch
-                      <select
-                        value={queueBranch.id}
-                        onChange={(e) => {
-                          setQueueError("");
-                          setSelectedBranchId(e.target.value);
-                        }}
-                        className="w-full p-2 text-sm font-normal border rounded"
-                      >
-                        {branches.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name} ({b.code})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <form
-                      className="flex gap-2 max-w-xl mb-6"
-                      onSubmit={addQueue}
-                    >
-                      <input
-                        type="text"
-                        placeholder="Queue Name"
-                        value={queueName}
-                        onChange={(e) => setQueueName(e.target.value)}
-                        required
-                        className="p-2 text-sm border rounded w-1/2"
-                      />
-                      <input
-                        type="text"
-                        aria-label="Branch"
-                        value={`${queueBranch.name} (${queueBranch.code})`}
-                        readOnly
-                        className="p-2 text-sm border rounded w-1/2 bg-slate-50 text-slate-500"
-                      />
-                      <button
-                        type="submit"
-                        disabled={isSavingQueue}
-                        className="flex items-center gap-1 bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <Plus className="w-4 h-4" /> Add
-                      </button>
-                    </form>
-
-                    {queueError && (
-                      <p className="mb-4 text-sm text-red-500" role="alert">
-                        {queueError}
-                      </p>
-                    )}
-                    {isQueuesLoading && (
-                      <p className="mb-4 text-sm text-slate-500">
-                        Loading queues...
-                      </p>
-                    )}
-
-                    <ul className="divide-y border rounded-lg mb-6">
-                      {!isQueuesLoading && branchQueues.length === 0 && (
-                        <li className="p-4 text-sm text-slate-500">
-                          No queues for this branch.
-                        </li>
-                      )}
-                      {branchQueues.map((item) => {
-                        const addableServices = services.filter(
-                          (s) => !item.service_ids.includes(s.id),
-                        );
-                        return (
-                          <li key={item.id} className="p-4 hover:bg-slate-50">
-                            <div className="flex items-center justify-between">
-                              <div
-                                className={
-                                  editingQueueId === item.id
-                                    ? "w-full mr-4"
-                                    : undefined
-                                }
-                              >
-                                {editingQueueId === item.id ? (
-                                  <input
-                                    type="text"
-                                    aria-label="Queue name"
-                                    value={queueEditName}
-                                    onChange={(e) =>
-                                      setQueueEditName(e.target.value)
-                                    }
-                                    className="mb-1 p-1 border rounded text-sm w-1/2"
-                                  />
-                                ) : (
-                                  <p className="font-semibold text-slate-800">
-                                    {item.name}
-                                  </p>
-                                )}
-                                <p className="text-xs text-slate-500">
-                                  Services:{" "}
-                                  {services
-                                    .filter((s) =>
-                                      item.service_ids.includes(s.id),
-                                    )
-                                    .map((s) => s.name)
-                                    .join(", ") || "None"}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  disabled={addableServices.length === 0}
-                                  onClick={() => {
-                                    setQueueError("");
-                                    setServiceToAdd("");
-                                    setAddingServiceQueueId(item.id);
-                                  }}
-                                  className="flex items-center gap-1 rounded border border-indigo-200 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  <Plus className="w-3 h-3" /> Add service
-                                </button>
-                                {editingQueueId === item.id ? (
-                                  <>
-                                    <button
-                                      aria-label={`Save ${item.name}`}
-                                      disabled={isSavingQueue}
-                                      onClick={() => void renameQueue(item)}
-                                      className="p-1 text-green-600 hover:bg-green-50 rounded disabled:cursor-not-allowed disabled:opacity-60"
-                                    >
-                                      <Check className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      aria-label="Cancel edit"
-                                      onClick={() => {
-                                        setQueueError("");
-                                        setEditingQueueId(null);
-                                      }}
-                                      className="p-1 text-slate-400 hover:bg-slate-100 rounded"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </button>
-                                  </>
-                                ) : (
-                                  <button
-                                    aria-label={`Edit ${item.name}`}
-                                    onClick={() => {
-                                      setQueueError("");
-                                      setEditingQueueId(item.id);
-                                      setQueueEditName(item.name);
-                                    }}
-                                    className="p-1 text-slate-600 hover:bg-slate-100 rounded"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
-                                )}
-                                {editingQueueId === item.id ? null : (
-                                  <button
-                                    aria-label={`Delete ${item.name}`}
-                                    onClick={() => void deleteQueue(item)}
-                                    className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            {addingServiceQueueId === item.id && (
-                              <form
-                                className="mt-3 flex gap-2 max-w-xl"
-                                onSubmit={(event) => {
-                                  event.preventDefault();
-                                  void addServiceToQueue(item, serviceToAdd);
-                                }}
-                              >
-                                <select
-                                  aria-label={`Service to add to ${item.name}`}
-                                  value={serviceToAdd}
-                                  onChange={(e) =>
-                                    setServiceToAdd(e.target.value)
-                                  }
-                                  required
-                                  className="p-1 text-sm border rounded w-full"
-                                >
-                                  <option value="">Select a service</option>
-                                  {addableServices.map((s) => {
-                                    const currentQueue = branchQueues.find(
-                                      (q) => q.service_ids.includes(s.id),
-                                    );
-                                    return (
-                                      <option key={s.id} value={s.id}>
-                                        {s.name}
-                                        {currentQueue
-                                          ? ` (in ${currentQueue.name})`
-                                          : ""}
-                                      </option>
-                                    );
-                                  })}
-                                </select>
-                                <button
-                                  type="submit"
-                                  disabled={isAssigningService}
-                                  className="rounded bg-indigo-600 px-3 py-1 text-sm text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Add
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label="Cancel adding service"
-                                  onClick={() => setAddingServiceQueueId(null)}
-                                  className="p-1 text-slate-400 hover:bg-slate-100 rounded"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </form>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </>
-                )}
-              </div>
-            )}
-
             {configSubTab === "staff" && (
               <div>
                 <div className="mb-6 flex justify-end">
@@ -1716,8 +1288,14 @@ function AdminDashboard() {
                           @{item.username} | {item.email} | Role: {item.role}
                         </p>
                         <p className="text-xs text-slate-500">
-                          Queue:{" "}
-                          {queues.find((queue) => queue.id === item.queue_id)?.name ?? "None assigned"}
+                          {branches.find((branch) => branch.id === item.branch_id)?.name ?? "No branch"}
+                          {" · "}
+                          {item.counter_name ?? "No counter name"}
+                          {" · "}
+                          {services
+                            .filter((service) => item.service_ids.includes(service.id))
+                            .map((service) => service.name)
+                            .join(", ") || "No services"}
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -1732,7 +1310,9 @@ function AdminDashboard() {
                               email: item.email,
                               code: "",
                               role: item.role,
-                              queue_id: item.queue_id ?? null,
+                              branch_id: item.branch_id,
+                              counter_name: item.counter_name ?? "",
+                              service_ids: item.service_ids,
                             });
                             setIsStaffModalOpen(true);
                           }}
@@ -1876,54 +1456,81 @@ function AdminDashboard() {
                           </label>
                         </div>
 
-                        <label className="block space-y-1.5 text-sm font-medium text-slate-700">
-                          Assigned queue
-                          {isQueuesLoading ? (
-                            <p className="text-sm text-slate-500">
-                              Loading queues...
-                            </p>
-                          ) : queues.length === 0 ? (
-                            <p className="text-sm text-slate-500">
-                              Create a queue before assigning it to staff.
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                            Branch
+                            {branches.length === 0 ? (
+                              <p className="text-sm font-normal text-slate-500">
+                                Create a branch before assigning it to staff.
+                              </p>
+                            ) : (
+                              <select
+                                className="w-full rounded border border-slate-300 px-3 py-2 text-sm font-normal"
+                                onChange={(event) =>
+                                  setStaffForm((current) => ({
+                                    ...current,
+                                    branch_id: event.target.value || null,
+                                  }))
+                                }
+                                value={staffForm.branch_id ?? ""}
+                              >
+                                <option value="">No branch assigned</option>
+                                {branches.map((branch) => (
+                                  <option key={branch.id} value={branch.id}>
+                                    {branch.name} ({branch.code})
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </label>
+                          <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                            Counter name (optional)
+                            <input
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                              maxLength={60}
+                              onChange={(event) =>
+                                setStaffForm({
+                                  ...staffForm,
+                                  counter_name: event.target.value,
+                                })
+                              }
+                              placeholder="e.g. Counter 1"
+                              value={staffForm.counter_name}
+                            />
+                          </label>
+                        </div>
+
+                        <fieldset className="space-y-1.5 text-sm font-medium text-slate-700">
+                          <legend>Services served at this counter</legend>
+                          {services.length === 0 ? (
+                            <p className="text-sm font-normal text-slate-500">
+                              Create a service before assigning it to staff.
                             </p>
                           ) : (
-                            <select
-                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm font-normal"
-                              onChange={(event) =>
-                                setStaffForm((current) => ({
-                                  ...current,
-                                  queue_id: event.target.value || null,
-                                }))
-                              }
-                              value={staffForm.queue_id ?? ""}
-                            >
-                              <option value="">No queue assigned</option>
-                              {queues.map((queue) => {
-                                const branchName = branches.find(
-                                  (branch) => branch.id === queue.branch_id,
-                                )?.name;
-                                const assignedStaff = staff.find(
-                                  (staffUser) =>
-                                    staffUser.id !== editingStaffId &&
-                                    staffUser.queue_id === queue.id,
-                                );
-                                return (
-                                  <option
-                                    key={queue.id}
-                                    value={queue.id}
-                                    disabled={Boolean(assignedStaff)}
-                                  >
-                                    {branchName ? `${branchName}: ` : ""}
-                                    {queue.name}
-                                    {assignedStaff
-                                      ? ` (assigned to ${assignedStaff.name})`
-                                      : ""}
-                                  </option>
-                                );
-                              })}
-                            </select>
+                            <div className="grid gap-2 rounded border border-slate-300 p-3 sm:grid-cols-2">
+                              {services.map((service) => (
+                                <label
+                                  key={service.id}
+                                  className="flex items-center gap-2 font-normal"
+                                >
+                                  <input
+                                    checked={staffForm.service_ids.includes(service.id)}
+                                    onChange={(event) =>
+                                      setStaffForm((current) => ({
+                                        ...current,
+                                        service_ids: event.target.checked
+                                          ? [...current.service_ids, service.id]
+                                          : current.service_ids.filter((id) => id !== service.id),
+                                      }))
+                                    }
+                                    type="checkbox"
+                                  />
+                                  {service.name}
+                                </label>
+                              ))}
+                            </div>
                           )}
-                        </label>
+                        </fieldset>
 
                         <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
                           <button
@@ -2099,7 +1706,7 @@ function AdminDashboard() {
                 </section>
               </>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 border border-slate-200 rounded-lg bg-slate-50">
                 <p className="text-xs font-semibold text-slate-500 uppercase">
                   Branches
@@ -2114,14 +1721,6 @@ function AdminDashboard() {
                 </p>
                 <p className="text-3xl font-bold text-slate-800">
                   {services.length}
-                </p>
-              </div>
-              <div className="p-4 border border-slate-200 rounded-lg bg-slate-50">
-                <p className="text-xs font-semibold text-slate-500 uppercase">
-                  Queues
-                </p>
-                <p className="text-3xl font-bold text-slate-800">
-                  {queues.length}
                 </p>
               </div>
               <div className="p-4 border border-slate-200 rounded-lg bg-slate-50">

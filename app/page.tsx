@@ -68,7 +68,7 @@ export default function HomePage() {
               icon: Settings,
               title: "Set up your operation",
               description:
-                "Admins add branches, define services and queues, assign staff, and create QR codes for access the customer portal and staff portal.",
+                "Admins add branches, define services, set up staff counters, and create QR codes for access the customer portal and staff portal.",
             },
             {
               number: "02",
@@ -161,7 +161,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-lg font-bold text-zinc-100">Admin portal</h3>
             <p className="mt-2 text-sm leading-6 text-zinc-400">
-              Manage branches, services, queues, staff, and access QR codes.
+              Manage branches, services, staff counters, and access QR codes.
             </p>
           </Link>
         </div>

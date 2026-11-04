@@ -3,10 +3,12 @@ import { authenticateRequest, hashPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { assertWithinPlanLimit, PlanLimitError, planLimitResponse } from "@/lib/plans";
 import {
-  isStaffQueueAssignmentConflict,
+  checkStaffAssignment,
+  isForeignKeyViolation,
   isUniqueViolation,
+  replaceStaffUserServices,
   staffUserColumns,
-  staffUserColumnsWithQueue,
+  staffUserColumnsWithServices,
   validateStaffUserFields,
   type StaffUserRecord,
 } from "@/lib/staff-users";
@@ -20,7 +22,7 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
     const result = await db.query<StaffUserRecord>(
-      `SELECT ${staffUserColumnsWithQueue} FROM staff_users
+      `SELECT ${staffUserColumnsWithServices} FROM staff_users
        WHERE tenant_code = $1 ORDER BY created_at DESC, id`,
       [user.tenant_code],
     );
@@ -46,48 +48,32 @@ export async function POST(request: NextRequest) {
     const validation = validateStaffUserFields(body);
     if ("error" in validation) return NextResponse.json({ error: validation.error }, { status: 400 });
 
-    const { name, username, email, role, code, queue_id = null } = validation.fields;
+    const {
+      name, username, email, role, code,
+      branch_id = null, counter_name = null, service_ids = [],
+    } = validation.fields;
     // Hashed before the transaction so the plan-limit lock is not held during bcrypt.
     const codeHash = await hashPassword(code!);
     const client = await db.connect();
     try {
       await client.query("BEGIN");
       await assertWithinPlanLimit(client, user.tenant_code, "staff_users");
-      if (queue_id) {
-        const queueResult = await client.query<{ count: string }>(
-          "SELECT COUNT(*)::text AS count FROM queues WHERE tenant_code = $1 AND id = $2",
-          [user.tenant_code, queue_id],
-        );
-        if (Number(queueResult.rows[0].count) !== 1) {
-          await client.query("ROLLBACK");
-          return NextResponse.json({ error: "Queue was not found in this tenant." }, { status: 400 });
-        }
-        const assignedResult = await client.query(
-          "SELECT 1 FROM staff_user_queues WHERE queue_id = $1 LIMIT 1",
-          [queue_id],
-        );
-        if (assignedResult.rowCount) {
-          await client.query("ROLLBACK");
-          return NextResponse.json({ error: "This queue is already assigned to another staff user." }, { status: 409 });
-        }
+      const assignmentError = await checkStaffAssignment(client, user.tenant_code, branch_id, service_ids);
+      if (assignmentError) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({ error: assignmentError }, { status: 400 });
       }
 
       const result = await client.query<StaffUserRecord>(
-        `INSERT INTO staff_users (tenant_code, name, username, email, role, code_hash)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO staff_users (tenant_code, name, username, email, role, code_hash, branch_id, counter_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING ${staffUserColumns}`,
-        [user.tenant_code, name, username, email, role, codeHash],
+        [user.tenant_code, name, username, email, role, codeHash, branch_id, counter_name],
       );
       const staffUser = result.rows[0];
-      if (queue_id) {
-        await client.query(
-          `INSERT INTO staff_user_queues (tenant_code, staff_user_id, queue_id)
-           VALUES ($1, $2, $3)`,
-          [user.tenant_code, staffUser.id, queue_id],
-        );
-      }
+      await replaceStaffUserServices(client, staffUser.id, service_ids);
       await client.query("COMMIT");
-      return NextResponse.json({ staffUser: { ...staffUser, queue_id } }, { status: 201 });
+      return NextResponse.json({ staffUser: { ...staffUser, service_ids } }, { status: 201 });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       throw error;
@@ -96,8 +82,9 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     if (error instanceof PlanLimitError) return planLimitResponse(error);
-    if (isStaffQueueAssignmentConflict(error)) {
-      return NextResponse.json({ error: "This queue is already assigned to another staff user." }, { status: 409 });
+    // The branch or a service was deleted while the request was in flight.
+    if (isForeignKeyViolation(error)) {
+      return NextResponse.json({ error: "Branch or service not found." }, { status: 400 });
     }
     if (isUniqueViolation(error)) {
       return NextResponse.json({ error: "Username or email is already used in this tenant." }, { status: 409 });

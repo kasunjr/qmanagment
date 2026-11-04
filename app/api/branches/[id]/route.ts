@@ -63,7 +63,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
     if (!isUuid(params.id)) return NextResponse.json({ error: "Invalid branch ID." }, { status: 400 });
 
-    // Cascades to the branch's queues and service assignments.
+    // Cascades to the branch's tickets; its staff users stay, with no branch.
     const result = await db.query<{ id: string }>(
       "DELETE FROM branches WHERE id = $1 AND tenant_code = $2 RETURNING id",
       [params.id, user.tenant_code],

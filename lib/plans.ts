@@ -17,7 +17,6 @@ const tenantPlan = `tenant_subscriptions ts JOIN plans p ON p.code = ${effective
 export const planResources = {
   branches: { table: "branches", limitColumn: "max_branches", singular: "branch", plural: "branches" },
   services: { table: "services", limitColumn: "max_services", singular: "service", plural: "services" },
-  queues: { table: "queues", limitColumn: "max_queues", singular: "queue", plural: "queues" },
   staff_users: {
     table: "staff_users",
     limitColumn: "max_staff_users",
@@ -32,7 +31,6 @@ export type PlanResource = keyof typeof planResources;
 export interface PlanLimits {
   branches: number | null;
   services: number | null;
-  queues: number | null;
   staff_users: number | null;
   tickets_per_day: number | null;
 }
@@ -40,7 +38,6 @@ export interface PlanLimits {
 export interface PlanUsage {
   branches: number;
   services: number;
-  queues: number;
   staff_users: number;
   tickets_today: number;
 }
@@ -75,11 +72,10 @@ export async function listPlans(): Promise<PlanRecord[]> {
     price_label: string;
     max_branches: number | null;
     max_services: number | null;
-    max_queues: number | null;
     max_staff_users: number | null;
     max_tickets_per_day: number | null;
   }>(
-    `SELECT code, name, price_label, max_branches, max_services, max_queues,
+    `SELECT code, name, price_label, max_branches, max_services,
             max_staff_users, max_tickets_per_day
      FROM plans ORDER BY sort_order, code`,
   );
@@ -90,7 +86,6 @@ export async function listPlans(): Promise<PlanRecord[]> {
     limits: {
       branches: row.max_branches,
       services: row.max_services,
-      queues: row.max_queues,
       staff_users: row.max_staff_users,
       tickets_per_day: row.max_tickets_per_day,
     },
@@ -123,12 +118,10 @@ export async function getTenantUsage(tenantCode: string, client: Queryable = db)
     plan_name: string;
     max_branches: number | null;
     max_services: number | null;
-    max_queues: number | null;
     max_staff_users: number | null;
     max_tickets_per_day: number | null;
     branches: number;
     services: number;
-    queues: number;
     staff_users: number;
     tickets_today: number;
     subscribed_plan_code: string;
@@ -136,11 +129,10 @@ export async function getTenantUsage(tenantCode: string, client: Queryable = db)
     expires_at: Date | null;
   }>(
     `SELECT p.code AS plan_code, p.name AS plan_name,
-            p.max_branches, p.max_services, p.max_queues, p.max_staff_users, p.max_tickets_per_day,
+            p.max_branches, p.max_services, p.max_staff_users, p.max_tickets_per_day,
             sp.code AS subscribed_plan_code, sp.name AS subscribed_plan_name, ts.expires_at,
             (SELECT COUNT(*)::int FROM branches WHERE tenant_code = ts.tenant_code) AS branches,
             (SELECT COUNT(*)::int FROM services WHERE tenant_code = ts.tenant_code) AS services,
-            (SELECT COUNT(*)::int FROM queues WHERE tenant_code = ts.tenant_code) AS queues,
             (SELECT COUNT(*)::int FROM staff_users WHERE tenant_code = ts.tenant_code) AS staff_users,
             COALESCE((SELECT tickets_created FROM tenant_daily_usage
                       WHERE tenant_code = ts.tenant_code AND usage_date = CURRENT_DATE), 0) AS tickets_today
@@ -158,14 +150,12 @@ export async function getTenantUsage(tenantCode: string, client: Queryable = db)
     limits: {
       branches: row.max_branches,
       services: row.max_services,
-      queues: row.max_queues,
       staff_users: row.max_staff_users,
       tickets_per_day: row.max_tickets_per_day,
     },
     usage: {
       branches: row.branches,
       services: row.services,
-      queues: row.queues,
       staff_users: row.staff_users,
       tickets_today: row.tickets_today,
     },
