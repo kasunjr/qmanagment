@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateStaffRequest } from "@/lib/staff-auth";
 import { db } from "@/lib/db";
-import {
-  callNextTicket,
-  getCounterTicket,
-  lockCounter,
-  notifyBranchTicketsChanged,
-  type CounterTicket,
-} from "@/lib/tickets";
+import { getCounterTicket, lockCounter, notifyBranchTicketsChanged } from "@/lib/tickets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Completes this counter's serving ticket, then calls its next waiting ticket.
+// Completes this counter's serving ticket. It does not call the next ticket: the counter stays
+// free until staff call the next customer with POST /api/staff/queue/next.
 export async function POST(request: NextRequest) {
   const staffUser = await authenticateStaffRequest(request);
   if (!staffUser) {
@@ -49,12 +44,9 @@ export async function POST(request: NextRequest) {
     );
     const completedTicket = await getCounterTicket(client, currentTicketId);
 
-    const nextTicketId = await callNextTicket(client, counter);
-    const calledTicket: CounterTicket | null = nextTicketId ? await getCounterTicket(client, nextTicketId) : null;
-
     await notifyBranchTicketsChanged(client, counter.branch_id);
     await client.query("COMMIT");
-    return NextResponse.json({ completedTicket, calledTicket });
+    return NextResponse.json({ completedTicket });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("Serving ticket completion failed:", error);

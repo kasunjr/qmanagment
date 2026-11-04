@@ -148,21 +148,16 @@ export default function StaffPage() {
     try {
       const response = await fetch("/api/staff/queue/complete", { method: "POST" });
       const result = (await response.json().catch(() => null)) as
-        | { completedTicket?: QueueTicket; calledTicket?: QueueTicket | null; error?: string }
+        | { completedTicket?: QueueTicket; error?: string }
         | null;
       if (!response.ok || !result?.completedTicket) {
         throw new Error(result?.error || "Unable to complete the serving ticket.");
       }
-      setTickets((current) => {
-        const remaining = current.filter(
-          (ticket) => ticket.id !== result.completedTicket!.id && ticket.id !== result.calledTicket?.id,
-        );
-        return [
-          ...(result.calledTicket ? [result.calledTicket] : []),
-          result.completedTicket!,
-          ...remaining,
-        ];
-      });
+      // Finishing does not call the next customer; the counter stays free until "Call next".
+      setTickets((current) => [
+        result.completedTicket!,
+        ...current.filter((ticket) => ticket.id !== result.completedTicket!.id),
+      ]);
     } catch (completeError) {
       setCallError(completeError instanceof Error ? completeError.message : "Unable to complete the serving ticket.");
     } finally {
@@ -255,7 +250,7 @@ export default function StaffPage() {
                   type="button"
                 >
                   <CheckCircle className="h-5 w-5" />
-                  {isCompleting ? "Completing..." : "Complete & call next"}
+                  {isCompleting ? "Finishing..." : "Finish"}
                 </button>
               </div>
             </section>

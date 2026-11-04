@@ -72,14 +72,14 @@ Staff users are separate from account users. An authenticated account manages on
 | `GET /api/staff/queue` | Return the staff member's counter (`name`, `branch_name`, `services`) and today's tickets: the branch's waiting tickets for the counter's services, plus the counter's own serving and completed tickets. Returns `counter: null` and an empty ticket list when no branch is assigned. |
 | `GET /api/staff/queue/events` | Authenticated server-sent event stream. Sends `tickets-updated` when a ticket in the staff member's branch is created, called or completed. |
 | `POST /api/staff/queue/next` | Call the longest-waiting ticket in the counter's branch among the services it serves, changing it from `waiting` to `serving` and recording the counter. Returns `409` if the counter has no branch, is already serving, or no ticket is waiting. |
-| `POST /api/staff/queue/complete` | Complete the counter's serving ticket and call its next waiting ticket. Returns `409` if the counter has no serving ticket. |
+| `POST /api/staff/queue/complete` | Complete the counter's serving ticket. It does not call the next ticket; the counter stays free until `POST /api/staff/queue/next`. Returns `409` if the counter has no serving ticket. |
 | `POST /api/staff-auth/logout` | Clear only the staff authentication and tenant cookies. |
 
 Staff JWTs use `JWT_STAFF_ACCESS_SECRET`, a separate issuer/audience, and an 8-hour lifetime. Account tokens cannot authenticate staff sessions, and staff tokens cannot authenticate account endpoints. `/staff/{tenantCode}` is the tenant-specific staff login page. Successful login redirects to `/staff`, which is protected by middleware; without a valid staff JWT, requests are redirected to the remembered tenant login page or `/` if no tenant is known. The shared navbar hides the Admin Portal/account controls on staff routes and shows staff logout only for a verified staff session.
 
 The staff login and `/api/staff-auth/me` responses also include `branch_id`, `counter_name` and `service_ids`. A staff user is a counter: it belongs to one branch and serves any number of services, and a service can be served by any number of counters. The API enforces tenant boundaries, and the database allows a counter only one serving ticket at a time.
 
-The admin staff-user screen uses these endpoints. The staff counter page reads the counter and its current-day tickets from `GET /api/staff/queue`, refreshes immediately on `tickets-updated` events, calls the longest-waiting customer with `POST /api/staff/queue/next`, and completes the serving ticket while calling the next with `POST /api/staff/queue/complete`. Two counters calling at the same moment never get the same ticket.
+The admin staff-user screen uses these endpoints. The staff counter page reads the counter and its current-day tickets from `GET /api/staff/queue`, refreshes immediately on `tickets-updated` events, calls the longest-waiting customer with `POST /api/staff/queue/next`, and finishes the serving ticket with `POST /api/staff/queue/complete`. Finish and Call next are separate buttons: finishing leaves the counter free until staff call the next customer. Two counters calling at the same moment never get the same ticket.
 
 ### Branches and Services
 
