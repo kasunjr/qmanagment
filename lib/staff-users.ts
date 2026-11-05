@@ -82,16 +82,16 @@ export function validateStaffUserFields(
     fields.branch_id = body.branch_id as string | null;
   }
 
-  // An empty counter name is stored as null.
-  if (has("counter_name")) {
-    if (body.counter_name !== null && typeof body.counter_name !== "string") {
-      return { error: "Counter name must be text or null." };
-    }
+  // Counter name is required on create and cannot be cleared on update.
+  if (!partial || has("counter_name")) {
     const counterName = typeof body.counter_name === "string" ? body.counter_name.trim() : "";
+    if (!counterName) {
+      return { error: "Counter name is required." };
+    }
     if (counterName.length > 60) {
       return { error: "Counter name must be at most 60 characters." };
     }
-    fields.counter_name = counterName || null;
+    fields.counter_name = counterName;
   }
 
   if (has("service_ids")) {

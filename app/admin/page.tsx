@@ -1484,10 +1484,11 @@ function AdminDashboard() {
                             )}
                           </label>
                           <label className="space-y-1.5 text-sm font-medium text-slate-700">
-                            Counter name (optional)
+                            Counter name
                             <input
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
                               maxLength={60}
+                              required
                               onChange={(event) =>
                                 setStaffForm({
                                   ...staffForm,
