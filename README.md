@@ -32,7 +32,9 @@ Run the command twice. Put one value in `JWT_ACCESS_SECRET` and the other in `JW
 
 Signup requires a six-digit email verification code before a session is created; unverified accounts cannot sign in. A welcome email is sent after the signup email is verified. Login also uses a six-digit email code after password verification. For test email delivery, create a dedicated Gmail account, enable 2-Step Verification, and create an App Password. Set `GMAIL_USER`, `GMAIL_APP_PASSWORD`, and optionally `GMAIL_FROM` in `.env.local` and in the Vercel project's Environment Variables. Do not commit or share the App Password. Codes expire after 10 minutes, are single-use, and can be resent once per minute.
 
-The admin Profile tab supports editing the account name, changing the email address with verification, changing the password, and saving two-step verification and account-update notification preferences. Two-step verification is off by default for new accounts and can be enabled in Profile settings; disabling it requires the current password. Changing the password revokes sessions and requires signing in again. The notification preference is stored for future use; account-update emails are not currently sent.
+Google sign-in is available on both the signup and login forms. Create a Google OAuth 2.0 Web application client, add the app callback URL (`https://your-domain/api/auth/google/callback`, or `http://localhost:3000/api/auth/google/callback` for local development) to its authorized redirect URIs, and set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and the exact matching `GOOGLE_REDIRECT_URI` in `.env.local` and the deployment environment. Google accounts are matched by verified email and linked to their stable Google account ID; existing account roles and tenant codes are preserved. Google-only accounts can set a password from the Profile page, and their email-code two-step setting is honored after Google authentication.
+
+The admin Profile tab supports editing the account name, changing the email address with verification, changing or setting the password, and saving two-step verification and account-update notification preferences. Two-step verification is off by default for new accounts and can be enabled in Profile settings; disabling it requires the current password for password accounts. Google-only accounts authorize profile security changes using their signed-in session. Changing the password revokes sessions and requires signing in again. The notification preference is stored for future use; account-update emails are not currently sent.
 
 Apply database migrations, then start the app:
 
@@ -51,6 +53,8 @@ All request and response bodies are JSON. Login and signup return a 15-minute ac
 | --- | --- |
 | `POST /api/auth/signup` | Create a regular account and session. Body: `{"email":"person@example.com","password":"at-least-12-chars"}` |
 | `POST /api/auth/login` | Verify credentials and create a session; invalid credentials return `401`. |
+| `GET /api/auth/google/start` | Start Google OAuth sign-in, optionally preserving a same-origin `next` path. |
+| `GET /api/auth/google/callback` | Complete Google OAuth sign-in and apply the configured email-code second step. |
 | `POST /api/auth/refresh` | Rotate the refresh cookie and return a new access JWT. |
 | `POST /api/auth/logout` | Revoke the refresh token and clear its cookie. |
 | `GET /api/auth/me` | Return the current user; requires a bearer access token. |

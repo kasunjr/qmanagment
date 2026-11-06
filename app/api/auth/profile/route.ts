@@ -18,9 +18,10 @@ export async function GET(request: NextRequest) {
       email_verified_at: Date | null;
       two_step_enabled: boolean;
       account_updates_enabled: boolean;
+      has_password: boolean;
     }>(
       `SELECT display_name, email, role, tenant_code, email_verified_at,
-              two_step_enabled, account_updates_enabled
+              two_step_enabled, account_updates_enabled, password_hash IS NOT NULL AS has_password
        FROM users
        WHERE id = $1`,
       [user.id],
@@ -82,12 +83,12 @@ export async function PATCH(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
     if (hasTwoStep && body.twoStepEnabled === false) {
-      const securityResult = await db.query<{ two_step_enabled: boolean; password_hash: string }>(
+      const securityResult = await db.query<{ two_step_enabled: boolean; password_hash: string | null }>(
         "SELECT two_step_enabled, password_hash FROM users WHERE id = $1",
         [user.id],
       );
       const security = securityResult.rows[0];
-      if (security?.two_step_enabled && (
+      if (security?.two_step_enabled && security.password_hash && (
         typeof body.currentPassword !== "string" ||
         !(await verifyPassword(body.currentPassword, security.password_hash))
       )) {
@@ -103,6 +104,7 @@ export async function PATCH(request: NextRequest) {
       email_verified_at: Date | null;
       two_step_enabled: boolean;
       account_updates_enabled: boolean;
+      has_password: boolean;
     }>(
       `UPDATE users
        SET display_name = CASE WHEN $2::boolean THEN $3 ELSE display_name END,
@@ -111,7 +113,7 @@ export async function PATCH(request: NextRequest) {
            updated_at = NOW()
        WHERE id = $1
        RETURNING display_name, email, role, tenant_code, email_verified_at,
-                 two_step_enabled, account_updates_enabled`,
+                 two_step_enabled, account_updates_enabled, password_hash IS NOT NULL AS has_password`,
       [
         user.id,
         hasDisplayName,

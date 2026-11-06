@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Menu, X } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { themeStyle, type AppTheme } from "@/lib/theme-style";
+import styles from "./Navbar.module.css";
+import logo from "@/app/assets/logo.png";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -18,6 +22,38 @@ export default function Navbar() {
   const [isStaffSigningOut, setIsStaffSigningOut] = useState(false);
   const [staffBrand, setStaffBrand] = useState<AppTheme | null>(null);
   const [customerBrand, setCustomerBrand] = useState<AppTheme | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const navigationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setIsMenuOpen(false), [pathname]);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const desktop = window.matchMedia("(min-width: 640px)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) setIsMenuOpen(false);
+    };
+    closeOnDesktop();
+    if (!desktop.matches) navigationRef.current?.querySelector<HTMLAnchorElement>("a")?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMenuOpen(false);
+        menuButtonRef.current?.focus();
+      }
+    };
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node && !navigationRef.current?.contains(event.target) && !menuButtonRef.current?.contains(event.target)) setIsMenuOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      desktop.removeEventListener("change", closeOnDesktop);
+    };
+  }, [isMenuOpen]);
 
   const navLinks = [
     { name: "Home", href: "/" },
@@ -111,13 +147,16 @@ export default function Navbar() {
   };
 
   const tenantBrand = isStaffRoute ? staffBrand : customerBrand;
+  const isPublicNav = !isStaffRoute && !customerTenantCode;
 
   return (
     <nav
       className={`sticky top-0 z-50 border-b ${
         tenantBrand
           ? "border-theme-text/10 bg-theme-surface text-theme-text"
-          : "border-slate-800 bg-slate-900 text-white"
+          : isPublicNav
+            ? styles.publicNav
+            : "border-slate-800 bg-slate-900 text-white"
       }`}
       style={tenantBrand ? { ...themeStyle(tenantBrand), backgroundColor: tenantBrand.surface_color } : undefined}
     >
@@ -132,14 +171,31 @@ export default function Navbar() {
               <span className="truncate text-lg font-bold">{tenantBrand.app_name}</span>
             </div>
           ) : (
-            <div className="flex items-center space-x-2 font-bold text-xl tracking-wide">
-              <span className="bg-teal-500 text-zinc-950 px-2 py-1 rounded">
-                My
-              </span>
-              <span>Turn</span>
-            </div>
+            <Link href="/" aria-label="MyTurn home" className={`${styles.brand} ${isPublicNav ? "" : styles.brandOnDark}`}>
+              <Image src={logo} alt="MyTurn" className={styles.brandLogo} sizes="(max-width: 639px) 96px, 160px" priority />
+            </Link>
           )}
-          <div className="flex items-center space-x-2 sm:space-x-4">
+          {isPublicNav && (
+            <button
+              ref={menuButtonRef}
+              type="button"
+              className={styles.menuToggle}
+              aria-expanded={isMenuOpen}
+              aria-controls="public-navigation"
+              aria-label={isMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+              onClick={() => setIsMenuOpen((open) => !open)}
+            >
+              {isMenuOpen ? <X size={23} /> : <Menu size={23} />}
+            </button>
+          )}
+          <div
+            ref={navigationRef}
+            id="public-navigation"
+            className={`flex items-center space-x-2 sm:space-x-4 ${styles.navLinks} ${isMenuOpen ? styles.menuOpen : ""}`}
+            onClick={(event) => {
+              if (event.target instanceof Element && event.target.closest("a")) setIsMenuOpen(false);
+            }}
+          >
             {navLinks
               .filter(() => !isStaffRoute && !customerTenantCode)
               .map((link) => {
@@ -148,14 +204,15 @@ export default function Navbar() {
                   <Link
                     key={link.name}
                     href={link.href}
+                    aria-current={isActive ? "page" : undefined}
                     className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
                       isActive
                         ? tenantBrand
                           ? "bg-theme-primary text-theme-on-primary"
-                          : "bg-teal-500 text-zinc-950"
+                          : styles.activeLink
                         : tenantBrand
                           ? "text-theme-text/70 hover:bg-theme-text/5 hover:text-theme-text"
-                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                          : styles.publicLink
                     }`}
                   >
                     {link.name}
@@ -180,7 +237,13 @@ export default function Navbar() {
               : !isLoading &&
                 (user ? (
                   <button
-                    className="px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white sm:text-sm"
+                    className={`px-3 py-2 text-xs font-medium transition-colors sm:text-sm ${
+                      tenantBrand
+                        ? "text-theme-text/70 hover:bg-theme-text/5 hover:text-theme-text"
+                        : isPublicNav
+                          ? styles.publicLink
+                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    }`}
                     onClick={async () => {
                       await signOut();
                       router.push("/login");
@@ -192,10 +255,13 @@ export default function Navbar() {
                 ) : (
                   <Link
                     className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                      pathname === "/login" || pathname === "/signup"
-                        ? "bg-indigo-600 text-white"
-                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      tenantBrand
+                        ? "text-theme-text/70 hover:bg-theme-text/5 hover:text-theme-text"
+                        : isPublicNav
+                          ? styles.signIn
+                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
                     }`}
+                    aria-current={pathname === "/login" ? "page" : undefined}
                     href="/login"
                   >
                     Sign in

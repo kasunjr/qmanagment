@@ -21,6 +21,7 @@ interface ProfileData {
   email_verified: boolean;
   two_step_enabled: boolean;
   account_updates_enabled: boolean;
+  has_password: boolean;
 }
 
 interface ProfileResponse {
@@ -156,7 +157,10 @@ export default function AdminProfile({ user, accessToken, acceptSession, signOut
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email: newEmail, currentPassword: emailPassword }),
+        body: JSON.stringify({
+          email: newEmail,
+          ...(profile?.has_password ? { currentPassword: emailPassword } : {}),
+        }),
       });
       const result = (await response.json()) as ProfileResponse;
       if (result.challengeId) {
@@ -249,7 +253,10 @@ export default function AdminProfile({ user, accessToken, acceptSession, signOut
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: JSON.stringify({
+          ...(profile?.has_password ? { currentPassword } : {}),
+          newPassword,
+        }),
       });
       const result = (await response.json()) as ProfileResponse;
       if (!response.ok) throw new Error(result.error ?? "Unable to change password.");
@@ -388,18 +395,22 @@ export default function AdminProfile({ user, accessToken, acceptSession, signOut
                         value={newEmail}
                       />
                     </div>
-                    <div>
-                      <label htmlFor="email-current-password" className="mb-1.5 block text-sm font-medium text-slate-700">Current password</label>
-                      <input
-                        autoComplete="current-password"
-                        className={inputClass}
-                        id="email-current-password"
-                        onChange={(event) => setEmailPassword(event.target.value)}
-                        required
-                        type="password"
-                        value={emailPassword}
-                      />
-                    </div>
+                    {profile.has_password ? (
+                      <div>
+                        <label htmlFor="email-current-password" className="mb-1.5 block text-sm font-medium text-slate-700">Current password</label>
+                        <input
+                          autoComplete="current-password"
+                          className={inputClass}
+                          id="email-current-password"
+                          onChange={(event) => setEmailPassword(event.target.value)}
+                          required
+                          type="password"
+                          value={emailPassword}
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500">Your signed-in Google session will authorize this change.</p>
+                    )}
                     <div className="flex gap-2">
                       <button className={primaryButtonClass} disabled={isSendingEmailCode} type="submit">
                         {isSendingEmailCode ? "Sending code..." : "Send verification code"}
@@ -491,22 +502,28 @@ export default function AdminProfile({ user, accessToken, acceptSession, signOut
                   <KeyRound aria-hidden="true" className="mt-0.5 h-4 w-4 text-slate-400" />
                   <div>
                     <p className="text-sm font-medium text-slate-800">Password</p>
-                    <p className="mt-1 text-sm text-slate-500">Changing your password signs you out of all sessions.</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {profile.has_password
+                        ? "Changing your password signs you out of all sessions."
+                        : "Set a password for email sign-in. This signs you out of all sessions."}
+                    </p>
                   </div>
                 </div>
                 <form className="grid gap-3 sm:grid-cols-2" onSubmit={changePassword}>
-                  <div className="sm:col-span-2">
-                    <label htmlFor="current-password" className="mb-1.5 block text-sm font-medium text-slate-700">Current password</label>
-                    <input
-                      autoComplete="current-password"
-                      className={inputClass}
-                      id="current-password"
-                      onChange={(event) => setCurrentPassword(event.target.value)}
-                      required
-                      type="password"
-                      value={currentPassword}
-                    />
-                  </div>
+                  {profile.has_password && (
+                    <div className="sm:col-span-2">
+                      <label htmlFor="current-password" className="mb-1.5 block text-sm font-medium text-slate-700">Current password</label>
+                      <input
+                        autoComplete="current-password"
+                        className={inputClass}
+                        id="current-password"
+                        onChange={(event) => setCurrentPassword(event.target.value)}
+                        required
+                        type="password"
+                        value={currentPassword}
+                      />
+                    </div>
+                  )}
                   <div>
                     <label htmlFor="new-password" className="mb-1.5 block text-sm font-medium text-slate-700">New password</label>
                     <input
@@ -548,7 +565,7 @@ export default function AdminProfile({ user, accessToken, acceptSession, signOut
                     <div>
                       <p className="text-sm font-medium text-slate-800">Two-step verification</p>
                       <p className="mt-1 text-sm text-slate-500">
-                        Require an email code in addition to your password when signing in.
+                        Require an email code in addition to your sign-in method.
                       </p>
                     </div>
                   </div>
@@ -579,21 +596,29 @@ export default function AdminProfile({ user, accessToken, acceptSession, signOut
                     }}
                   >
                     <div>
-                      <label htmlFor="two-step-password" className="mb-1.5 block text-sm font-medium text-slate-700">
-                        Confirm your password
-                      </label>
-                      <p className="mb-3 text-sm text-slate-500">
-                        Enter your current password to turn off email verification at sign-in.
-                      </p>
-                      <input
-                        autoComplete="current-password"
-                        className={inputClass}
-                        id="two-step-password"
-                        onChange={(event) => setTwoStepPassword(event.target.value)}
-                        required
-                        type="password"
-                        value={twoStepPassword}
-                      />
+                      {profile.has_password ? (
+                        <>
+                          <label htmlFor="two-step-password" className="mb-1.5 block text-sm font-medium text-slate-700">
+                            Confirm your password
+                          </label>
+                          <p className="mb-3 text-sm text-slate-500">
+                            Enter your current password to turn off email verification at sign-in.
+                          </p>
+                          <input
+                            autoComplete="current-password"
+                            className={inputClass}
+                            id="two-step-password"
+                            onChange={(event) => setTwoStepPassword(event.target.value)}
+                            required
+                            type="password"
+                            value={twoStepPassword}
+                          />
+                        </>
+                      ) : (
+                        <p className="text-sm text-slate-500">
+                          Confirm this change using your signed-in Google session.
+                        </p>
+                      )}
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
                       <button

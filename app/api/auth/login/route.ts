@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       email: string;
       role: "user" | "admin";
       tenant_code: string;
-      password_hash: string;
+      password_hash: string | null;
       email_verified_at: Date | null;
       two_step_enabled: boolean;
     }>(
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       [email],
     );
     const user = result.rows[0];
-    if (!user || !(await verifyPassword(body.password, user.password_hash))) {
+    if (!user || !user.password_hash || !(await verifyPassword(body.password, user.password_hash))) {
       return NextResponse.json({ error: "Email or password is incorrect." }, { status: 401 });
     }
     if (!user.email_verified_at) {
