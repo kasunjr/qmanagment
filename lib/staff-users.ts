@@ -10,6 +10,7 @@ export interface StaffUserRecord {
   email: string;
   role: string | null;
   is_enabled: boolean;
+  walk_in_enabled: boolean;
   branch_id: string | null;
   counter_name: string | null;
   service_ids: string[];
@@ -23,6 +24,7 @@ export interface StaffUserFields {
   email?: string;
   role?: string;
   is_enabled?: boolean;
+  walk_in_enabled?: boolean;
   code?: string;
   branch_id?: string | null;
   counter_name?: string | null;
@@ -30,7 +32,7 @@ export interface StaffUserFields {
 }
 
 export const staffUserColumns =
-  "id, tenant_code, name, username, email, role, is_enabled, branch_id, counter_name, created_at, updated_at";
+  "id, tenant_code, name, username, email, role, is_enabled, walk_in_enabled, branch_id, counter_name, created_at, updated_at";
 export const staffUserColumnsWithServices = `${staffUserColumns}, COALESCE((
   SELECT array_agg(sus.service_id ORDER BY sus.service_id)
   FROM staff_user_services sus WHERE sus.staff_user_id = staff_users.id
@@ -80,6 +82,13 @@ export function validateStaffUserFields(
       return { error: "Enabled status must be true or false." };
     }
     fields.is_enabled = body.is_enabled;
+  }
+
+  if (has("walk_in_enabled")) {
+    if (typeof body.walk_in_enabled !== "boolean") {
+      return { error: "Walk-in ticket access must be true or false." };
+    }
+    fields.walk_in_enabled = body.walk_in_enabled;
   }
 
   if (has("branch_id")) {

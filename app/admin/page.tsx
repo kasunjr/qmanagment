@@ -53,6 +53,7 @@ interface Staff {
   username: string;
   email: string;
   is_enabled: boolean;
+  walk_in_enabled: boolean;
   branch_id: string | null;
   counter_name: string | null;
   service_ids: string[];
@@ -385,6 +386,7 @@ function AdminDashboard() {
     username: "",
     email: "",
     code: "",
+    walk_in_enabled: false,
     branch_id: null as string | null,
     counter_name: "",
     service_ids: [] as string[],
@@ -688,6 +690,7 @@ function AdminDashboard() {
       username: "",
       email: "",
       code: "",
+      walk_in_enabled: false,
       branch_id: null,
       counter_name: "",
       service_ids: [],
@@ -706,6 +709,7 @@ function AdminDashboard() {
       name: staffForm.name.trim(),
       username: staffForm.username.trim(),
       email: staffForm.email.trim(),
+      walk_in_enabled: staffForm.walk_in_enabled,
       branch_id: staffForm.branch_id,
       counter_name: staffForm.counter_name.trim() || null,
       service_ids: staffForm.service_ids,
@@ -1528,6 +1532,7 @@ function AdminDashboard() {
                               username: item.username,
                               email: item.email,
                               code: "",
+                              walk_in_enabled: item.walk_in_enabled,
                               branch_id: item.branch_id,
                               counter_name: item.counter_name ?? "",
                               service_ids: item.service_ids,
@@ -1735,6 +1740,24 @@ function AdminDashboard() {
                             </div>
                           )}
                         </fieldset>
+
+                        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                          <input
+                            checked={staffForm.walk_in_enabled}
+                            className="mt-0.5 h-4 w-4 shrink-0"
+                            onChange={(event) =>
+                              setStaffForm((current) => ({
+                                ...current,
+                                walk_in_enabled: event.target.checked,
+                              }))
+                            }
+                            type="checkbox"
+                          />
+                          <span>
+                            <span className="block font-semibold text-slate-800">Allow walk-in tickets</span>
+                            <span className="mt-1 block font-normal text-slate-500">Let this staff user issue tickets for customers at the counter.</span>
+                          </span>
+                        </label>
 
                         <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
                           <button

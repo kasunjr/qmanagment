@@ -1,0 +1,2 @@
+ALTER TABLE staff_users
+    ADD COLUMN walk_in_enabled BOOLEAN NOT NULL DEFAULT FALSE;

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import WalkInTicketForm from "@/components/WalkInTicketForm";
 import { DEFAULT_APP_THEME, themeStyle, type AppTheme } from "@/lib/theme-style";
-import { AlertTriangle, AtSign, CheckCircle, ClipboardList, Clock3, LogOut, MapPin, Play, UserCheck } from "lucide-react";
+import { AlertTriangle, AtSign, Check, CheckCircle, ChevronDown, ClipboardList, Clock3, LogOut, MapPin, Play, Ticket, UserCheck } from "lucide-react";
 
 // This staff member's counter. Waiting tickets are shared with other counters in the branch
 // that serve the same services; serving and completed tickets are this counter's own.
@@ -34,7 +34,17 @@ interface StaffSession {
   name: string;
   username: string;
   tenant_code: string;
+  walk_in_enabled: boolean;
 }
+
+type WaitingSort = "wait" | "ticket" | "service";
+type WaitingDirection = "asc" | "desc";
+
+const WAITING_SORT_OPTIONS: { value: WaitingSort; label: string }[] = [
+  { value: "wait", label: "Wait time" },
+  { value: "ticket", label: "Ticket number" },
+  { value: "service", label: "Service name" },
+];
 
 function formatWaitTime(createdAt: string): string {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60_000));
@@ -55,11 +65,48 @@ export default function StaffPage() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [theme, setTheme] = useState<AppTheme | null>(null);
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
+  const [waitingSort, setWaitingSort] = useState<WaitingSort>("wait");
+  const [waitingDirection, setWaitingDirection] = useState<WaitingDirection>("desc");
+  const [isWaitingSortOpen, setIsWaitingSortOpen] = useState(false);
+  const waitingSortRef = useRef<HTMLDivElement>(null);
+  const waitingSortButtonRef = useRef<HTMLButtonElement>(null);
   const servingTicket = tickets.find((ticket) => ticket.status === "serving");
   const waitingTickets = tickets.filter((ticket) => ticket.status === "waiting");
+  const sortedWaitingTickets = [...waitingTickets].sort((first, second) => {
+    const direction = waitingDirection === "asc" ? 1 : -1;
+    if (waitingSort === "ticket") {
+      return (first.ticket_number - second.ticket_number) * direction || first.created_at.localeCompare(second.created_at);
+    }
+    if (waitingSort === "service") {
+      return first.service_name.localeCompare(second.service_name) * direction || first.ticket_number - second.ticket_number;
+    }
+    const waitingTimeOrder = first.created_at.localeCompare(second.created_at);
+    return waitingTimeOrder * (waitingDirection === "desc" ? 1 : -1) || first.ticket_number - second.ticket_number;
+  });
   const completedTickets = tickets.filter((ticket) => ticket.status === "completed");
   const counterLabel = counter ? `${counter.branch_name} · ${counter.name ?? "Unnamed counter"}` : "";
   const hasServices = Boolean(counter?.services.length);
+
+  useEffect(() => {
+    if (!isWaitingSortOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node && !waitingSortRef.current?.contains(event.target)) {
+        setIsWaitingSortOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsWaitingSortOpen(false);
+        waitingSortButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isWaitingSortOpen]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -309,19 +356,37 @@ export default function StaffPage() {
                   <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-theme-on-secondary" />
                   <h2 id="serving-ticket-title">Now serving</h2>
                 </div>
-                <span className="text-sm text-theme-on-secondary/80">{counterLabel}</span>
+                <span className="inline-flex items-center gap-1.5 text-sm text-theme-on-secondary/80">
+                  <MapPin aria-hidden="true" className="h-4 w-4" />
+                  {counterLabel}
+                </span>
               </div>
-              <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(180px,0.7fr)_minmax(0,1.5fr)_auto] lg:items-center">
-                <p className="text-6xl font-extrabold leading-none sm:text-7xl">
-                  {String(servingTicket.ticket_number).padStart(3, "0")}
-                </p>
+              <div className="grid grid-cols-[minmax(104px,0.65fr)_minmax(0,1.35fr)] items-center gap-4 p-4 sm:grid-cols-[minmax(150px,0.55fr)_minmax(0,1.45fr)_auto] sm:gap-6 sm:p-7">
+                <div className="flex min-h-28 flex-col justify-between rounded-theme border border-theme-on-secondary/15 bg-theme-on-secondary/10 p-3 sm:p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-theme-on-secondary/70">
+                    <Ticket aria-hidden="true" className="h-4 w-4" />
+                    Ticket
+                  </div>
+                  <p className="text-4xl font-extrabold leading-none sm:text-6xl">
+                    {String(servingTicket.ticket_number).padStart(3, "0")}
+                  </p>
+                </div>
                 <div className="min-w-0">
-                  <p className="truncate text-2xl font-bold sm:text-3xl">{servingTicket.customer_name}</p>
-                  <p className="mt-2 text-base text-theme-on-secondary/90 sm:text-lg">{servingTicket.service_name}</p>
-                  <p className="mt-3 text-sm text-theme-on-secondary/70">Arrived {formatWaitTime(servingTicket.created_at)} ago</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-theme-on-secondary/65">Customer</p>
+                  <p className="mt-1 break-words text-xl font-bold sm:text-3xl">{servingTicket.customer_name}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                    <span className="inline-flex min-w-0 items-center gap-1.5 font-medium text-theme-on-secondary/95">
+                      <ClipboardList aria-hidden="true" className="h-4 w-4 shrink-0" />
+                      <span className="break-words">{servingTicket.service_name}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 text-theme-on-secondary/70">
+                      <Clock3 aria-hidden="true" className="h-4 w-4 shrink-0" />
+                      Arrived {formatWaitTime(servingTicket.created_at)} ago
+                    </span>
+                  </div>
                 </div>
                 <button
-                  className="flex min-h-12 items-center justify-center gap-2 rounded-theme bg-theme-on-secondary px-5 py-3 text-sm font-bold text-theme-secondary hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="col-span-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-theme bg-theme-on-secondary px-5 py-3 text-sm font-bold text-theme-secondary hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-1 sm:w-auto"
                   disabled={isCompleting || isLoading}
                   onClick={() => void completeServing()}
                   type="button"
@@ -333,11 +398,16 @@ export default function StaffPage() {
             </section>
           ) : (
             <section className="flex flex-wrap items-center justify-between gap-5 rounded-theme-lg border border-theme-text/10 bg-theme-surface p-5 sm:p-7">
-              <div>
-                <p className="text-sm font-bold uppercase text-theme-text/60">No active customer</p>
-                <p className="mt-1 text-xl font-semibold">
-                  {waitingTickets.length ? "Ready to call the next ticket" : "No one is waiting"}
-                </p>
+              <div className="flex min-w-0 items-center gap-4">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-theme bg-theme-primary/10 text-theme-primary">
+                  <UserCheck aria-hidden="true" className="h-6 w-6" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold uppercase text-theme-text/60">No active customer</p>
+                  <p className="mt-1 text-xl font-semibold">
+                    {waitingTickets.length ? "Ready to call the next ticket" : "No one is waiting"}
+                  </p>
+                </div>
               </div>
               <button
                 className="flex min-h-12 items-center justify-center gap-2 rounded-theme bg-theme-primary px-5 py-3 text-sm font-bold text-theme-on-primary hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
@@ -351,28 +421,96 @@ export default function StaffPage() {
             </section>
           )}
 
-          <WalkInTicketForm />
+          {staffUser?.walk_in_enabled && <WalkInTicketForm />}
 
-          <section aria-labelledby="waiting-list-title">
-            <div className="mb-3 flex items-end justify-between gap-3">
+          <section aria-labelledby="waiting-list-title" className="overflow-visible rounded-theme-lg border border-theme-text/10 bg-theme-surface">
+            <div className="flex flex-wrap items-end justify-between gap-3 px-5 py-4 sm:px-6">
               <div>
                 <h2 className="text-lg font-bold" id="waiting-list-title">Waiting customers</h2>
                 <p className="text-sm text-theme-text/60">
                   For your services, shared with other counters. The longest waiting is called next.
                 </p>
               </div>
-              <span className="text-sm font-semibold text-theme-text/60">{waitingTickets.length} tickets</span>
+              <div className="flex items-center gap-2">
+                {waitingTickets.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="whitespace-nowrap text-xs font-medium text-theme-text/60">Sort based on</span>
+                      <div className="relative" ref={waitingSortRef}>
+                      <button
+                        ref={waitingSortButtonRef}
+                        aria-controls="waiting-sort-options"
+                        aria-expanded={isWaitingSortOpen}
+                        aria-label={`Sort waiting customers: ${WAITING_SORT_OPTIONS.find((option) => option.value === waitingSort)?.label}`}
+                        className="flex min-h-10 min-w-40 items-center justify-between gap-3 rounded-theme border border-theme-text/20 bg-theme-surface px-3 py-2 text-sm font-medium text-theme-text shadow-sm transition hover:border-theme-primary/50 focus:border-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary/20"
+                        onClick={() => setIsWaitingSortOpen((open) => !open)}
+                        type="button"
+                      >
+                        {WAITING_SORT_OPTIONS.find((option) => option.value === waitingSort)?.label}
+                        <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 text-theme-text/60 transition-transform ${isWaitingSortOpen ? "rotate-180" : ""}`} />
+                      </button>
+                      {isWaitingSortOpen && (
+                        <div id="waiting-sort-options" className="absolute right-0 top-full z-20 mt-2 w-48 rounded-theme-lg border border-theme-text/15 bg-theme-surface p-1 shadow-xl" role="group" aria-label="Sort waiting customers">
+                          {WAITING_SORT_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              aria-pressed={waitingSort === option.value}
+                              className={`flex min-h-10 w-full items-center justify-between gap-3 rounded-theme px-3 py-2 text-left text-sm transition ${waitingSort === option.value ? "bg-theme-primary text-theme-on-primary" : "text-theme-text hover:bg-theme-primary/10"}`}
+                              onClick={() => {
+                                setWaitingSort(option.value);
+                                setWaitingDirection(option.value === "wait" ? "desc" : "asc");
+                                setIsWaitingSortOpen(false);
+                              }}
+                              type="button"
+                            >
+                              {option.label}
+                              {waitingSort === option.value && <Check aria-hidden="true" className="h-4 w-4 shrink-0" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      </div>
+                    </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="whitespace-nowrap text-xs font-medium text-theme-text/60">Order</span>
+                    <div className="flex rounded-theme border border-theme-text/15 bg-theme-surface p-0.5" role="group" aria-label="Sort direction">
+                      {(["asc", "desc"] as const).map((direction) => (
+                        <button
+                          key={direction}
+                          aria-label={direction === "asc" ? "Ascending order" : "Descending order"}
+                          aria-pressed={waitingDirection === direction}
+                          className={`min-h-8 rounded-theme px-2 text-xs font-medium transition sm:px-2.5 ${waitingDirection === direction ? "bg-theme-primary text-theme-on-primary" : "text-theme-text/70 hover:bg-theme-primary/10"}`}
+                          onClick={() => setWaitingDirection(direction)}
+                          type="button"
+                        >
+                          {direction === "asc" ? "Ascending" : "Descending"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  </div>
+                )}
+                <span className="shrink-0 rounded-theme bg-theme-primary/10 px-2.5 py-1 text-sm font-semibold text-theme-primary">{waitingTickets.length} tickets</span>
+              </div>
             </div>
             {waitingTickets.length === 0 ? (
-              <p className="border-y border-theme-text/10 py-6 text-sm text-theme-text/60">No waiting customers.</p>
+              <div className="flex items-center gap-4 border-t border-theme-text/10 px-5 py-5 sm:px-6" role="status">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-theme bg-theme-primary/10 text-theme-primary">
+                  <CheckCircle aria-hidden="true" className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-theme-text">All caught up</p>
+                  <p className="mt-1 text-sm text-theme-text/60">No customers are waiting for your services right now.</p>
+                </div>
+              </div>
             ) : (
-              <ol className="divide-y divide-theme-text/10 border-y border-theme-text/10">
-                {waitingTickets.map((ticket, index) => (
-                  <li key={ticket.id} className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 py-4 sm:grid-cols-[3rem_minmax(0,1fr)_8rem] sm:gap-5">
-                    <span className="text-sm font-semibold text-theme-text/40">{String(index + 1).padStart(2, "0")}</span>
+              <ol className="divide-y divide-theme-text/10 border-t border-theme-text/10">
+                {sortedWaitingTickets.map((ticket) => (
+                  <li key={ticket.id} className="grid grid-cols-[4rem_minmax(0,1fr)_auto] items-center gap-3 px-5 py-4 sm:grid-cols-[5rem_minmax(0,1fr)_8rem] sm:gap-5 sm:px-6">
+                    <span className="text-2xl font-extrabold leading-none text-theme-primary sm:text-3xl">{String(ticket.ticket_number).padStart(3, "0")}</span>
                     <div className="min-w-0">
-                      <p className="truncate text-lg font-semibold">{ticket.customer_name}</p>
-                      <p className="truncate text-sm text-theme-text/60">{ticket.service_name} · Ticket {String(ticket.ticket_number).padStart(3, "0")}</p>
+                      <p className="truncate text-base font-semibold">{ticket.service_name}</p>
+                      <p className="truncate text-sm text-theme-text/60">{ticket.customer_name}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-base font-bold text-theme-primary">{formatWaitTime(ticket.created_at)}</p>

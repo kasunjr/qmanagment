@@ -15,11 +15,11 @@ export interface AppTheme {
 export const DEFAULT_APP_THEME: AppTheme = {
   app_name: "Queue Management",
   logo_url: null,
-  primary_color: "#4f46e5",
-  secondary_color: "#10b981",
-  background_color: "#f8fafc",
+  primary_color: "#087a3c",
+  secondary_color: "#04633e",
+  background_color: "#f7faf8",
   surface_color: "#ffffff",
-  text_color: "#1e293b",
+  text_color: "#243c32",
   font_family: "system",
   corner_radius: "medium",
 };

@@ -1,7 +1,8 @@
 "use client";
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
-import { ImagePlus, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
+import { ImagePlus, Palette, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
+import { DEFAULT_APP_THEME } from "@/lib/theme-style";
 
 interface ThemeSettings {
   appName: string;
@@ -40,18 +41,19 @@ const fromApi = (theme: ApiTheme): ThemeSettings => ({
 });
 
 const DEFAULT_THEME: ThemeSettings = {
-  appName: "Queue Management",
-  logoUrl: null,
-  primaryColor: "#4f46e5",
-  secondaryColor: "#10b981",
-  backgroundColor: "#f8fafc",
-  surfaceColor: "#ffffff",
-  textColor: "#1e293b",
-  fontFamily: "system",
-  cornerRadius: "medium",
+  appName: DEFAULT_APP_THEME.app_name,
+  logoUrl: DEFAULT_APP_THEME.logo_url,
+  primaryColor: DEFAULT_APP_THEME.primary_color,
+  secondaryColor: DEFAULT_APP_THEME.secondary_color,
+  backgroundColor: DEFAULT_APP_THEME.background_color,
+  surfaceColor: DEFAULT_APP_THEME.surface_color,
+  textColor: DEFAULT_APP_THEME.text_color,
+  fontFamily: DEFAULT_APP_THEME.font_family,
+  cornerRadius: DEFAULT_APP_THEME.corner_radius,
 };
 
 const PRESETS: { name: string; colors: Pick<ThemeSettings, "primaryColor" | "secondaryColor" | "backgroundColor" | "surfaceColor" | "textColor"> }[] = [
+  { name: "Admin green", colors: { primaryColor: "#087a3c", secondaryColor: "#04633e", backgroundColor: "#f7faf8", surfaceColor: "#ffffff", textColor: "#243c32" } },
   { name: "Indigo", colors: { primaryColor: "#4f46e5", secondaryColor: "#10b981", backgroundColor: "#f8fafc", surfaceColor: "#ffffff", textColor: "#1e293b" } },
   { name: "Ocean", colors: { primaryColor: "#0369a1", secondaryColor: "#f59e0b", backgroundColor: "#f0f9ff", surfaceColor: "#ffffff", textColor: "#0c4a6e" } },
   { name: "Forest", colors: { primaryColor: "#15803d", secondaryColor: "#ca8a04", backgroundColor: "#f7fee7", surfaceColor: "#ffffff", textColor: "#14532d" } },
@@ -357,19 +359,25 @@ export default function ThemeCustomization({ accessToken }: { accessToken: strin
   return (
     <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
       <div className="space-y-8">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-800">App theme</h3>
-          <p className="text-sm text-slate-500">
-            Applies to both the staff counter and the customer app.
-          </p>
-        </div>
+        <header className="flex items-start gap-3 border-b border-slate-200 pb-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
+            <Palette aria-hidden="true" className="h-5 w-5" />
+          </span>
+          <div>
+            <h3 className="text-xl font-semibold text-slate-800">App theme</h3>
+            <p className="mt-1 text-sm text-slate-500">Branding and appearance shared by the staff counter and customer app.</p>
+          </div>
+        </header>
 
-        <section aria-labelledby="branding-title" className="space-y-4">
-          <h4 className="text-sm font-bold uppercase text-slate-500" id="branding-title">Branding</h4>
+        <section aria-labelledby="branding-title" className="space-y-5 border-b border-slate-200 pb-7">
+          <div className="border-b border-slate-100 pb-3">
+            <h4 className="text-base font-semibold text-slate-800" id="branding-title">Branding</h4>
+            <p className="mt-1 text-sm text-slate-500">Set the display name and logo shown in both apps.</p>
+          </div>
           <label className="block max-w-md space-y-1.5 text-sm font-medium text-slate-700">
             Display name
             <input
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm font-normal"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal"
               maxLength={60}
               onChange={(event) => update("appName", event.target.value)}
               value={theme.appName}
@@ -380,7 +388,7 @@ export default function ThemeCustomization({ accessToken }: { accessToken: strin
             <p className="text-sm font-medium text-slate-700">Logo</p>
             <p className="mb-2 text-xs text-slate-500">PNG, JPG, SVG or WebP, up to 1 MB. Square images work best.</p>
             <div className="flex flex-wrap items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50">
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg border border-dashed border-slate-300 bg-white">
                 {theme.logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img alt="Logo preview" className="h-full w-full object-contain" src={theme.logoUrl} />
@@ -388,7 +396,7 @@ export default function ThemeCustomization({ accessToken }: { accessToken: strin
                   <ImagePlus className="h-6 w-6 text-slate-400" />
                 )}
               </div>
-              <label className="cursor-pointer rounded border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-within:ring-2 focus-within:ring-indigo-300">
+              <label className="cursor-pointer rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-within:ring-2 focus-within:ring-emerald-300">
                 {theme.logoUrl ? "Replace logo" : "Upload logo"}
                 <input accept={LOGO_TYPES.join(",")} className="sr-only" onChange={handleLogoChange} type="file" />
               </label>
@@ -406,19 +414,22 @@ export default function ThemeCustomization({ accessToken }: { accessToken: strin
           </div>
         </section>
 
-        <section aria-labelledby="colors-title" className="space-y-4">
-          <h4 className="text-sm font-bold uppercase text-slate-500" id="colors-title">Colors</h4>
+        <section aria-labelledby="colors-title" className="space-y-5 border-b border-slate-200 pb-7">
+          <div className="border-b border-slate-100 pb-3">
+            <h4 className="text-base font-semibold text-slate-800" id="colors-title">Colors</h4>
+            <p className="mt-1 text-sm text-slate-500">Choose a palette or adjust each color individually.</p>
+          </div>
           <div>
             <p className="mb-2 text-sm font-medium text-slate-700">Presets</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {PRESETS.map((preset) => {
                 const isActive = COLOR_FIELDS.every(({ key }) => theme[key] === preset.colors[key]);
                 return (
                   <button
                     key={preset.name}
                     aria-pressed={isActive}
-                    className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${
-                      isActive ? "border-indigo-500 bg-indigo-50 font-semibold text-indigo-700" : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                    className={`flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+                      isActive ? "border-emerald-700 bg-emerald-50 font-semibold text-emerald-900 ring-1 ring-emerald-700" : "border-slate-300 text-slate-700 hover:border-emerald-300 hover:bg-slate-50"
                     }`}
                     onClick={() => {
                       setSaveMessage("");
@@ -450,13 +461,16 @@ export default function ThemeCustomization({ accessToken }: { accessToken: strin
           </div>
         </section>
 
-        <section aria-labelledby="style-title" className="space-y-4">
-          <h4 className="text-sm font-bold uppercase text-slate-500" id="style-title">Typography &amp; shape</h4>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <label className="block space-y-1.5 text-sm font-medium text-slate-700">
-              Font
+        <section aria-labelledby="style-title" className="space-y-5">
+          <div className="border-b border-slate-100 pb-3">
+            <h4 className="text-base font-semibold text-slate-800" id="style-title">Typography &amp; shape</h4>
+            <p className="mt-1 text-sm text-slate-500">Set the typeface and corner style used across the apps.</p>
+          </div>
+          <div className="grid items-start gap-5 sm:grid-cols-2">
+            <label className="block min-w-0 text-sm font-medium text-slate-700">
+              <span className="mb-1.5 block">Font</span>
               <select
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm font-normal"
+                className="h-12 w-full rounded-lg border border-slate-300 px-3 text-sm font-normal"
                 onChange={(event) => update("fontFamily", event.target.value)}
                 value={theme.fontFamily}
               >
@@ -465,14 +479,14 @@ export default function ThemeCustomization({ accessToken }: { accessToken: strin
                 ))}
               </select>
             </label>
-            <fieldset>
+            <fieldset className="min-w-0">
               <legend className="mb-1.5 text-sm font-medium text-slate-700">Corner style</legend>
-              <div className="flex rounded border border-slate-300 p-0.5">
+              <div className="flex h-12 rounded-lg border border-slate-300 bg-white p-1">
                 {(Object.keys(RADIUS) as ThemeSettings["cornerRadius"][]).map((option) => (
                   <label
                     key={option}
-                    className={`flex-1 cursor-pointer rounded px-2 py-1.5 text-center text-sm capitalize focus-within:ring-2 focus-within:ring-indigo-300 ${
-                      theme.cornerRadius === option ? "bg-indigo-600 font-semibold text-white" : "text-slate-600 hover:bg-slate-100"
+                    className={`flex flex-1 cursor-pointer items-center justify-center rounded-md px-2 text-center text-sm capitalize focus-within:ring-2 focus-within:ring-emerald-300 ${
+                      theme.cornerRadius === option ? "bg-emerald-700 font-semibold text-white" : "text-slate-600 hover:bg-slate-100"
                     }`}
                   >
                     <input
@@ -501,7 +515,7 @@ export default function ThemeCustomization({ accessToken }: { accessToken: strin
             ) : null}
           </p>
           <button
-            className="flex items-center gap-2 rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
             onClick={() => {
               setSaveMessage("");
               setTheme({ ...DEFAULT_THEME, logoUrl: theme.logoUrl });
@@ -512,7 +526,7 @@ export default function ThemeCustomization({ accessToken }: { accessToken: strin
             <RotateCcw className="h-4 w-4" /> Reset to default
           </button>
           <button
-            className="flex items-center gap-2 rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!isDirty || isSaving}
             onClick={() => {
               setTheme(savedTheme);
@@ -524,7 +538,7 @@ export default function ThemeCustomization({ accessToken }: { accessToken: strin
             <Undo2 className="h-4 w-4" /> Discard changes
           </button>
           <button
-            className="flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={!isDirty || isSaving}
             onClick={() => void saveThemeSettings()}
             type="button"
@@ -535,15 +549,18 @@ export default function ThemeCustomization({ accessToken }: { accessToken: strin
       </div>
 
       <aside aria-label="Theme preview" className="xl:sticky xl:top-6 xl:self-start">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h4 className="text-sm font-bold uppercase text-slate-500">Live preview</h4>
-          <div className="flex rounded-lg bg-slate-100 p-0.5 text-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+          <div>
+            <h4 className="text-base font-semibold text-slate-800">Live preview</h4>
+            <p className="mt-1 text-xs text-slate-500">Updates as you edit.</p>
+          </div>
+          <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1 text-sm">
             {(["customer", "staff"] as const).map((variant) => (
               <button
                 key={variant}
                 aria-pressed={previewVariant === variant}
-                className={`rounded-md px-3 py-1 ${
-                  previewVariant === variant ? "bg-white font-semibold text-slate-800 shadow-sm" : "text-slate-600"
+                className={`rounded-md px-3 py-1.5 ${
+                  previewVariant === variant ? "bg-emerald-700 font-semibold text-white shadow-sm" : "text-slate-600 hover:bg-white"
                 }`}
                 onClick={() => setPreviewVariant(variant)}
                 type="button"

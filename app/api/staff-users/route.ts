@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
 
     const {
       name, username, email, code,
+      walk_in_enabled = false,
       branch_id = null, counter_name = null, service_ids = [],
     } = validation.fields;
     // Hashed before the transaction so the plan-limit lock is not held during bcrypt.
@@ -67,10 +68,10 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await client.query<StaffUserRecord>(
-        `INSERT INTO staff_users (tenant_code, name, username, email, code_hash, branch_id, counter_name)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO staff_users (tenant_code, name, username, email, code_hash, walk_in_enabled, branch_id, counter_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING ${staffUserColumns}`,
-        [user.tenant_code, name, username, email, codeHash, branch_id, counter_name],
+        [user.tenant_code, name, username, email, codeHash, walk_in_enabled, branch_id, counter_name],
       );
       const staffUser = result.rows[0];
       await replaceStaffUserServices(client, staffUser.id, service_ids);

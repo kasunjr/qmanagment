@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
     if (!staffUser) {
       return NextResponse.json({ error: "Staff authentication required." }, { status: 401 });
     }
+    if (!staffUser.walk_in_enabled) {
+      return NextResponse.json({ error: "Walk-in ticket issuance is disabled for this counter." }, { status: 403 });
+    }
     if (!staffUser.branch_id) {
       return NextResponse.json({ services: [] });
     }
