@@ -24,11 +24,38 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [isGoogleRedirecting, setIsGoogleRedirecting] = useState(false);
+  const [isGoogleVerification, setIsGoogleVerification] = useState(false);
   const isSignup = mode === "signup";
 
   useEffect(() => {
     if (!isLoading && user) router.replace("/admin");
   }, [isLoading, router, user]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const googleChallenge = params.get("google_challenge");
+    const googleError = params.get("error");
+
+    if (googleChallenge) {
+      setChallengeId(googleChallenge);
+      setVerificationType("login");
+      setLoginStep("code");
+      setIsGoogleVerification(true);
+    }
+    if (googleError === "google_configuration") {
+      setError("Google sign-in is not configured. Add the Google OAuth settings and try again.");
+    } else if (googleError) {
+      setError("Google sign-in could not be completed. Please try again.");
+    }
+
+    if (googleChallenge || googleError) {
+      params.delete("google_challenge");
+      params.delete("error");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    }
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -102,6 +129,13 @@ export default function AuthForm({ mode }: AuthFormProps) {
     }
   }
 
+  function startGoogleSignIn() {
+    setIsGoogleRedirecting(true);
+    const requestedPath = new URLSearchParams(window.location.search).get("next");
+    const query = requestedPath ? `?next=${encodeURIComponent(requestedPath)}` : "";
+    window.location.assign(`/api/auth/google/start${query}`);
+  }
+
   if (isLoading || user) {
     return (
       <div className="flex justify-center py-16" role="status" aria-label="Checking your session">
@@ -140,9 +174,30 @@ export default function AuthForm({ mode }: AuthFormProps) {
             : loginStep === "code" && verificationType === "signup"
               ? `Enter the 6-digit code sent to ${email} to verify your email.`
               : loginStep === "code"
-              ? `Enter the 6-digit code sent to ${email} to finish signing in.`
+              ? isGoogleVerification
+                ? "Enter the 6-digit code sent to your email to finish signing in."
+                : `Enter the 6-digit code sent to ${email} to finish signing in.`
               : "Sign in to continue to the admin dashboard."}
         </p>
+
+        {loginStep === "password" && (
+          <>
+            <button
+              className="mt-7 flex w-full items-center justify-center gap-3 border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+              disabled={isGoogleRedirecting || isSubmitting}
+              onClick={startGoogleSignIn}
+              type="button"
+            >
+              <span aria-hidden="true" className="font-bold text-base text-blue-600">G</span>
+              {isGoogleRedirecting ? "Redirecting to Google..." : "Continue with Google"}
+            </button>
+            <div className="mt-5 flex items-center gap-3 text-xs text-slate-400">
+              <span className="h-px flex-1 bg-slate-200" />
+              OR CONTINUE WITH EMAIL
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+          </>
+        )}
 
         <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
           {loginStep === "code" ? (
@@ -226,6 +281,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                 onClick={() => {
                   setError("");
                   setLoginStep("password");
+                  setIsGoogleVerification(false);
                 }}
                 type="button"
               >

@@ -22,20 +22,23 @@ export async function POST(request: NextRequest) {
   }
 
   const email = normalizeEmail(body.email);
-  if (!email || typeof body.currentPassword !== "string") {
-    return NextResponse.json({ error: "Provide a valid email address and current password." }, { status: 400 });
+  if (!email || (body.currentPassword !== undefined && typeof body.currentPassword !== "string")) {
+    return NextResponse.json({ error: "Provide a valid email address and current password if your account has one." }, { status: 400 });
   }
 
   try {
     const user = await authenticateRequest(request);
     if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
-    const accountResult = await db.query<{ password_hash: string; email: string }>(
+    const accountResult = await db.query<{ password_hash: string | null; email: string }>(
       "SELECT password_hash, email FROM users WHERE id = $1",
       [user.id],
     );
     const account = accountResult.rows[0];
-    if (!account || !(await verifyPassword(body.currentPassword, account.password_hash))) {
+    if (!account || (account.password_hash && (
+      typeof body.currentPassword !== "string" ||
+      !(await verifyPassword(body.currentPassword, account.password_hash))
+    ))) {
       return NextResponse.json({ error: "Current password is incorrect." }, { status: 401 });
     }
     if (email === account.email) {
