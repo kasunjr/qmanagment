@@ -26,6 +26,7 @@ import {
   Clock,
   Ticket,
   UserRound,
+  Power,
 } from "lucide-react";
 
 const adminFont = Outfit({ subsets: ["latin"], display: "swap", variable: "--font-admin" });
@@ -46,7 +47,7 @@ interface Staff {
   name: string;
   username: string;
   email: string;
-  role: string;
+  is_enabled: boolean;
   branch_id: string | null;
   counter_name: string | null;
   service_ids: string[];
@@ -213,15 +214,15 @@ function AdminDashboard() {
     "qr",
   );
 
-  const [staffUrl, setStaffUrl] = useState("http://localhost:3000/staff");
+  const [staffUrl, setStaffUrl] = useState("https://qmanagment.vercel.app/staff");
   const [customerUrl, setCustomerUrl] = useState(
-    "http://localhost:3000/customer",
+    "https://qmanagment.vercel.app/customer",
   );
 
   useEffect(() => {
     if (!user?.tenant_code) return;
-    setStaffUrl(`http://localhost:3000/staff/${user.tenant_code}`);
-    setCustomerUrl(`http://localhost:3000/customer/${user.tenant_code}`);
+    setStaffUrl(`https://qmanagment.vercel.app/staff/${user.tenant_code}`);
+    setCustomerUrl(`https://qmanagment.vercel.app/customer/${user.tenant_code}`);
   }, [user?.tenant_code]);
 
   // The tenant's plan, its limits and current usage; null until loaded or if loading fails.
@@ -363,7 +364,9 @@ function AdminDashboard() {
 
   const [isStaffLoading, setIsStaffLoading] = useState(false);
   const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [updatingStaffStatusId, setUpdatingStaffStatusId] = useState<string | null>(null);
   const [staffError, setStaffError] = useState("");
+  const [staffNotice, setStaffNotice] = useState<{ message: string; warning: boolean } | null>(null);
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [staffForm, setStaffForm] = useState({
@@ -371,7 +374,6 @@ function AdminDashboard() {
     username: "",
     email: "",
     code: "",
-    role: "",
     branch_id: null as string | null,
     counter_name: "",
     service_ids: [] as string[],
@@ -675,7 +677,6 @@ function AdminDashboard() {
       username: "",
       email: "",
       code: "",
-      role: "",
       branch_id: null,
       counter_name: "",
       service_ids: [],
@@ -689,11 +690,11 @@ function AdminDashboard() {
 
     setIsSavingStaff(true);
     setStaffError("");
+    setStaffNotice(null);
     const payload: Record<string, unknown> = {
       name: staffForm.name.trim(),
       username: staffForm.username.trim(),
       email: staffForm.email.trim(),
-      role: staffForm.role.trim(),
       branch_id: staffForm.branch_id,
       counter_name: staffForm.counter_name.trim() || null,
       service_ids: staffForm.service_ids,
@@ -717,6 +718,8 @@ function AdminDashboard() {
       const result = (await response.json().catch(() => null)) as {
         staffUser?: Staff;
         error?: string;
+        welcomeEmailSent?: boolean;
+        warning?: string;
       } | null;
       if (!response.ok || !result?.staffUser) {
         throw new Error(result?.error || "Unable to save staff user.");
@@ -730,6 +733,11 @@ function AdminDashboard() {
           : [result.staffUser!, ...currentStaff],
       );
       setIsStaffModalOpen(false);
+      setStaffNotice(editingStaffId ? { message: "Staff user updated.", warning: false } : result.welcomeEmailSent ? {
+        message: "Staff user created. A welcome email with the staff counter QR code was sent.", warning: false,
+      } : {
+        message: result.warning || "Staff user created, but the welcome email could not be sent. Share their staff counter link and username separately.", warning: true,
+      });
       resetStaffForm();
       if (!editingStaffId) void loadUsage();
     } catch (error) {
@@ -762,6 +770,36 @@ function AdminDashboard() {
       setStaffError(
         error instanceof Error ? error.message : "Unable to delete staff user.",
       );
+    }
+  };
+
+  const toggleStaffUser = async (staffUser: Staff) => {
+    if (!accessToken) return;
+    setUpdatingStaffStatusId(staffUser.id);
+    setStaffError("");
+    try {
+      const response = await fetch(`/api/staff-users/${staffUser.id}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ is_enabled: !staffUser.is_enabled }),
+      });
+      const result = (await response.json().catch(() => null)) as {
+        staffUser?: Staff;
+        error?: string;
+      } | null;
+      if (!response.ok || !result?.staffUser) {
+        throw new Error(result?.error || "Unable to update staff access.");
+      }
+      setStaff((currentStaff) =>
+        currentStaff.map((item) => item.id === staffUser.id ? result.staffUser! : item),
+      );
+    } catch (error) {
+      setStaffError(error instanceof Error ? error.message : "Unable to update staff access.");
+    } finally {
+      setUpdatingStaffStatusId(null);
     }
   };
 
@@ -1269,6 +1307,7 @@ function AdminDashboard() {
                     onClick={() => {
                       resetStaffForm();
                       setStaffError("");
+                      setStaffNotice(null);
                       setIsStaffModalOpen(true);
                     }}
                     className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"
@@ -1277,6 +1316,9 @@ function AdminDashboard() {
                   </button>
                 </div>
 
+                {staffNotice && !isStaffModalOpen && (
+                  <p role="status" className={`mb-4 rounded-lg border px-4 py-3 text-sm ${staffNotice.warning ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{staffNotice.message}</p>
+                )}
                 {staffError && !isStaffModalOpen && (
                   <p className="mb-4 text-sm text-red-500" role="alert">
                     {staffError}
@@ -1302,9 +1344,12 @@ function AdminDashboard() {
                       <div>
                         <p className="font-semibold text-slate-800">
                           {item.name}
+                          <span className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${item.is_enabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                            {item.is_enabled ? "Enabled" : "Disabled"}
+                          </span>
                         </p>
                         <p className="text-xs text-slate-500">
-                          @{item.username} | {item.email} | Role: {item.role}
+                          @{item.username} | {item.email}
                         </p>
                         <p className="text-xs text-slate-500">
                           {branches.find((branch) => branch.id === item.branch_id)?.name ?? "No branch"}
@@ -1319,16 +1364,26 @@ function AdminDashboard() {
                       </div>
                       <div className="flex gap-2">
                         <button
+                          type="button"
+                          aria-label={`${item.is_enabled ? "Disable" : "Enable"} ${item.name}`}
+                          title={`${item.is_enabled ? "Disable" : "Enable"} staff user`}
+                          disabled={updatingStaffStatusId !== null}
+                          onClick={() => void toggleStaffUser(item)}
+                          className={`p-1 rounded disabled:cursor-not-allowed disabled:opacity-50 ${item.is_enabled ? "text-amber-700 hover:bg-amber-50" : "text-emerald-700 hover:bg-emerald-50"}`}
+                        >
+                          <Power className="w-4 h-4" />
+                        </button>
+                        <button
                           aria-label={`Edit ${item.name}`}
                           onClick={() => {
                             setStaffError("");
+                            setStaffNotice(null);
                             setEditingStaffId(item.id);
                             setStaffForm({
                               name: item.name,
                               username: item.username,
                               email: item.email,
                               code: "",
-                              role: item.role,
                               branch_id: item.branch_id,
                               counter_name: item.counter_name ?? "",
                               service_ids: item.service_ids,
@@ -1456,21 +1511,6 @@ function AdminDashboard() {
                               required={!editingStaffId}
                               type="password"
                               value={staffForm.code}
-                            />
-                          </label>
-                          <label className="space-y-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
-                            Role
-                            <input
-                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                              onChange={(event) =>
-                                setStaffForm({
-                                  ...staffForm,
-                                  role: event.target.value,
-                                })
-                              }
-                              placeholder="e.g. Agent or Manager"
-                              required
-                              value={staffForm.role}
                             />
                           </label>
                         </div>

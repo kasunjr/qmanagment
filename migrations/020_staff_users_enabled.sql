@@ -1,0 +1,2 @@
+ALTER TABLE staff_users
+    ADD COLUMN is_enabled BOOLEAN NOT NULL DEFAULT TRUE;

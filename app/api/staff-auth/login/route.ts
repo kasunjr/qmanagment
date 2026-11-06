@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const username = input.username.trim().toLowerCase();
     const result = await db.query<StaffLoginRecord>(
       `SELECT ${staffUserColumnsWithServices}, code_hash FROM staff_users
-       WHERE tenant_code = $1 AND username = $2`,
+        WHERE tenant_code = $1 AND username = $2 AND is_enabled = TRUE`,
       [tenantCode, username],
     );
     const staff = result.rows[0];

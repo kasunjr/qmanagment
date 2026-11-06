@@ -8,7 +8,8 @@ export interface StaffUserRecord {
   name: string;
   username: string;
   email: string;
-  role: string;
+  role: string | null;
+  is_enabled: boolean;
   branch_id: string | null;
   counter_name: string | null;
   service_ids: string[];
@@ -21,6 +22,7 @@ export interface StaffUserFields {
   username?: string;
   email?: string;
   role?: string;
+  is_enabled?: boolean;
   code?: string;
   branch_id?: string | null;
   counter_name?: string | null;
@@ -28,7 +30,7 @@ export interface StaffUserFields {
 }
 
 export const staffUserColumns =
-  "id, tenant_code, name, username, email, role, branch_id, counter_name, created_at, updated_at";
+  "id, tenant_code, name, username, email, role, is_enabled, branch_id, counter_name, created_at, updated_at";
 export const staffUserColumnsWithServices = `${staffUserColumns}, COALESCE((
   SELECT array_agg(sus.service_id ORDER BY sus.service_id)
   FROM staff_user_services sus WHERE sus.staff_user_id = staff_users.id
@@ -71,8 +73,13 @@ export function validateStaffUserFields(
       return { error: "Role must be between 1 and 80 characters." };
     }
     fields.role = body.role.trim();
-  } else if (!partial) {
-    fields.role = "Agent";
+  }
+
+  if (has("is_enabled")) {
+    if (typeof body.is_enabled !== "boolean") {
+      return { error: "Enabled status must be true or false." };
+    }
+    fields.is_enabled = body.is_enabled;
   }
 
   if (has("branch_id")) {

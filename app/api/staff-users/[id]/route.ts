@@ -60,7 +60,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     const assignments: string[] = [];
     for (const [field, value] of Object.entries(fields)) {
       const column = field === "code" ? "code_hash" : field;
-      values.push(field === "code" ? await hashPassword(value!) : value);
+      values.push(field === "code" ? await hashPassword(value as string) : value);
       assignments.push(`${column} = $${values.length}`);
     }
     values.push(params.id, user.tenant_code);

@@ -97,7 +97,7 @@ export async function authenticateStaffRequest(
 
     const result = await db.query<StaffUserRecord>(
       `SELECT ${staffUserColumnsWithServices} FROM staff_users
-       WHERE id = $1 AND tenant_code = $2`,
+       WHERE id = $1 AND tenant_code = $2 AND is_enabled = TRUE`,
       [payload.sub, tenantCode],
     );
     return result.rows[0] ?? null;

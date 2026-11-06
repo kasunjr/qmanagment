@@ -64,10 +64,14 @@ All request and response bodies are JSON. Login and signup return a 15-minute ac
 
 Staff users are separate from account users. An authenticated account manages only staff rows matching its own `tenant_code`; each staff code is stored as a bcrypt hash. Manager CRUD requests use the account access token in `Authorization: Bearer <account-access-token>`.
 
+Creating a staff user sends a MyTurn welcome email containing their username, counter name, tenant staff sign-in link, and an inline PNG QR attachment for that same link. Set `APP_URL` to your public site origin (for example, `https://your-domain`) alongside the Gmail settings above. Use a publicly reachable HTTPS origin for real staff; a localhost link only works on the same device. Staff codes are not included in the email or QR code and must be shared separately by the administrator. Updates to existing staff do not send another welcome email.
+
+Email is sent after the staff record and service assignments commit, with the database connection released first. The creation response remains `201` if delivery fails: it includes `staffUser`, `welcomeEmailSent: false`, and a `warning`. The admin portal displays that warning; do not create the user again just to retry delivery. Successful delivery returns `welcomeEmailSent: true`.
+
 | Method and path | Purpose |
 | --- | --- |
 | `GET /api/staff-users` | List staff users for the authenticated account's tenant, including `branch_id`, `counter_name` and `service_ids`. |
-| `POST /api/staff-users` | Create a staff user. Required JSON: `name`, `username`, `email`, `code`; `role` is optional and defaults to `Agent`. Optional `branch_id`, `counter_name` (up to 60 characters; empty means none) and `service_ids` set up the counter. |
+| `POST /api/staff-users` | Create a staff user and send a welcome QR email. Required JSON: `name`, `username`, `email`, `code`, `counter_name` (up to 60 characters); `role` is optional and defaults to `Agent`. Optional `branch_id` and `service_ids` set up the counter. Returns the created `staffUser` and `welcomeEmailSent`, with a `warning` if delivery failed. |
 | `GET /api/staff-users/{id}` | Retrieve one staff user in the authenticated account's tenant, including `branch_id`, `counter_name` and `service_ids`. |
 | `PATCH /api/staff-users/{id}` | Update staff fields; send `code` only to replace the staff code. Optional `branch_id` and `counter_name` (pass `null` to clear) and `service_ids` (replaces the list). |
 | `DELETE /api/staff-users/{id}` | Delete a staff user in the authenticated account's tenant. |

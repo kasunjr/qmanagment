@@ -1,4 +1,11 @@
 import nodemailer from "nodemailer";
+import QRCode from "qrcode";
+
+function escapeEmailHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[character]!));
+}
 
 function createTransporter() {
   const username = process.env.GMAIL_USER;
@@ -53,9 +60,7 @@ async function sendCode(email: string, code: string, purpose: "login" | "signup"
       instruction: "Enter this code in your MyTurn profile settings to confirm your new email address. Your current sign-in email stays the same until verification is complete.",
     },
   }[purpose];
-  const safeCode = code.replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[character]!));
+  const safeCode = escapeEmailHtml(code);
 
   await createTransporter().sendMail({
     from: process.env.GMAIL_FROM || username,
@@ -133,6 +138,94 @@ export async function sendSignupVerificationCode(email: string, code: string): P
 
 export async function sendEmailChangeVerificationCode(email: string, code: string): Promise<void> {
   await sendCode(email, code, "email-change");
+}
+
+export async function sendStaffWelcomeEmail(staff: {
+  email: string;
+  name: string;
+  username: string;
+  tenant_code: string;
+  counter_name: string | null;
+}): Promise<void> {
+  if (!process.env.APP_URL) throw new Error("APP_URL must be configured to send staff welcome emails.");
+  const siteUrl = new URL(process.env.APP_URL);
+  if (!["http:", "https:"].includes(siteUrl.protocol) || siteUrl.username || siteUrl.password) {
+    throw new Error("APP_URL must be a public HTTP or HTTPS site origin without credentials.");
+  }
+  if (!/^[A-F0-9]{7}$/i.test(staff.tenant_code)) throw new Error("Invalid staff tenant code.");
+
+  const staffUrl = new URL(`/staff/${staff.tenant_code.toUpperCase()}`, siteUrl).href;
+  const transporter = createTransporter();
+  const qrImage = await QRCode.toBuffer(staffUrl, {
+    type: "png", width: 256, margin: 4, errorCorrectionLevel: "M",
+    color: { dark: "#000000", light: "#ffffff" },
+  });
+  const counterName = staff.counter_name || "Your staff counter";
+  const safeUrl = escapeEmailHtml(staffUrl);
+
+  await transporter.sendMail({
+    from: process.env.GMAIL_FROM || process.env.GMAIL_USER,
+    to: staff.email,
+    subject: "Welcome to your MyTurn staff counter",
+    text: [
+      `Welcome to MyTurn, ${staff.name}!`,
+      "Your administrator has created your staff account.",
+      "",
+      `Counter: ${counterName}`,
+      `Username: ${staff.username}`,
+      `Staff counter: ${staffUrl}`,
+      "",
+      "Scan the QR code attached to this email, or open the staff counter link above.",
+      "Sign in with your username and the staff code provided separately by your administrator.",
+      "For your security, your staff code is not included in this email or QR code.",
+      "If you need your code or your assignment needs updating, contact your administrator.",
+      "",
+      "A better turn for everyone.",
+      "The MyTurn team",
+    ].join("\n"),
+    html: `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>Welcome to your MyTurn staff counter</title></head>
+<body bgcolor="#f3f8f4" style="margin:0;padding:0;background-color:#f3f8f4;color:#243c32;font-family:'Trebuchet MS',Arial,sans-serif;-webkit-text-size-adjust:100%;">
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#f3f8f4;" aria-hidden="true">Your staff account is ready. Open your counter with your link or QR code.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f8f4"><tr><td align="center" style="padding:28px 12px;">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:600px;table-layout:fixed;border:1px solid #d5e5db;border-radius:22px;border-collapse:separate;background-color:#ffffff;">
+      <tr><td style="padding:24px 28px;border-bottom:1px solid #e2ece5;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="#00a66a" style="padding:3px 7px 5px;background-color:#00a66a;border-radius:7px;color:#ffffff;font-size:27px;font-weight:bold;line-height:31px;">My</td><td style="padding-left:6px;color:#243c32;font-size:27px;font-weight:bold;line-height:31px;">Turn</td></tr></table>
+      </td></tr>
+      <tr><td bgcolor="#eaf8e5" style="padding:28px;background-color:#eaf8e5;background-image:linear-gradient(115deg,#f3ffdf,#d9f6e8 65%,#e0f4fc);">
+        <p style="margin:0 0 12px;color:#087a3c;font-size:11px;font-weight:bold;line-height:18px;">WELCOME TO THE TEAM</p>
+        <h1 style="margin:0;color:#243c32;font-size:30px;font-weight:bold;line-height:38px;">Your counter is ready.</h1>
+        <p style="margin:14px 0 0;color:#435e4d;font-size:15px;line-height:25px;word-break:break-word;">Hi ${escapeEmailHtml(staff.name)}, your administrator has created your MyTurn staff account. Here&apos;s your link to a more organized day.</p>
+      </td></tr>
+      <tr><td style="padding:26px 28px;">
+        <p style="margin:0 0 8px;color:#55715f;font-size:10px;font-weight:bold;line-height:18px;">YOUR STAFF COUNTER</p>
+        <h2 style="margin:0;color:#243c32;font-size:22px;line-height:30px;word-break:break-word;">${escapeEmailHtml(counterName)}</h2>
+        <p style="margin:12px 0 22px;color:#59646b;font-size:14px;line-height:24px;word-break:break-all;">Username: <strong style="color:#243c32;">${escapeEmailHtml(staff.username)}</strong></p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border:1px solid #c9e2d2;border-radius:16px;background-color:#ffffff;"><tr><td align="center" style="padding:18px 8px;">
+          <img src="cid:staff-counter-qr@myturn" width="200" height="200" alt="QR code for your MyTurn staff sign-in page" style="display:block;width:200px;max-width:100%;height:auto;border:0;background-color:#ffffff;">
+          <p style="margin:12px 0 0;color:#496452;font-size:12px;line-height:21px;">Scan to open your staff sign-in page.</p>
+        </td></tr></table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-top:22px;"><tr><td align="center" bgcolor="#087a3c" style="background-color:#087a3c;background-image:linear-gradient(115deg,#17823a,#04633e);border-radius:12px;"><a href="${safeUrl}" style="display:block;padding:15px 20px;color:#ffffff;font-size:16px;font-weight:bold;line-height:24px;text-decoration:none;">Open staff counter &rarr;</a></td></tr></table>
+        <p style="margin:14px 0 0;color:#59646b;font-size:12px;line-height:21px;">If the QR image is hidden, use the button above or this link:<br><a href="${safeUrl}" style="color:#087a3c;word-break:break-all;">${safeUrl}</a></p>
+      </td></tr>
+      <tr><td style="padding:0 28px 26px;">
+        <p style="margin:0;padding:15px;background-color:#f2f8f3;border:1px solid #e0ece3;border-radius:11px;color:#496452;font-size:13px;line-height:23px;"><strong style="color:#243c32;">Keep your staff code private.</strong><br>Sign in with your username and the staff code provided separately by your administrator. Your staff code is not included in this email or QR code.</p>
+        <p style="margin:14px 0 0;color:#59646b;font-size:12px;line-height:21px;">Need your code or a different assignment? Contact your administrator.</p>
+      </td></tr>
+      <tr><td bgcolor="#f8fbf8" style="padding:20px 28px;background-color:#f8fbf8;border-top:1px solid #e2ece5;border-radius:0 0 22px 22px;"><p style="margin:0;color:#365447;font-size:14px;font-weight:bold;line-height:23px;">A better turn for everyone.</p><p style="margin:4px 0 0;color:#59646b;font-size:12px;line-height:21px;">The MyTurn team</p></td></tr>
+    </table>
+  </td></tr></table>
+</body>
+</html>`,
+    attachments: [{
+      filename: "myturn-staff-counter-qr.png",
+      content: qrImage,
+      contentType: "image/png",
+      contentDisposition: "inline",
+      cid: "staff-counter-qr@myturn",
+    }],
+  });
 }
 
 export async function sendWelcomeEmail(email: string): Promise<void> {
