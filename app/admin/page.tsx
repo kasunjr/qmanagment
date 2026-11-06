@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import Link from "next/link";
+import { Outfit } from "next/font/google";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import AdminProfile from "@/components/AdminProfile";
 import ThemeCustomization from "@/components/ThemeCustomization";
 import type { TenantUsage } from "@/lib/plans";
+import styles from "./admin.module.css";
 import {
   Download,
   Plus,
@@ -25,6 +27,8 @@ import {
   Ticket,
   UserRound,
 } from "lucide-react";
+
+const adminFont = Outfit({ subsets: ["latin"], display: "swap", variable: "--font-admin" });
 
 interface Branch {
   id: string;
@@ -174,10 +178,10 @@ function DailyTicketLimitBanner({ planUsage }: { planUsage: TenantUsage }) {
 
 function CurrentPlan({ planUsage }: { planUsage: TenantUsage }) {
   return (
-    <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+    <section className={styles.planSummary} aria-labelledby="admin-plan-title">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-slate-800">Current plan</h2>
+          <h2 id="admin-plan-title" className="text-sm font-semibold text-slate-800">Current plan</h2>
           <span className="rounded-full bg-indigo-100 px-3 py-1 text-sm font-semibold text-indigo-700">
             {planUsage.plan_name}
           </span>
@@ -189,6 +193,15 @@ function CurrentPlan({ planUsage }: { planUsage: TenantUsage }) {
           Upgrade plan <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
       </div>
+      <ul className={styles.usageList}>
+        {[
+          { label: "Branches", used: planUsage.usage.branches, limit: planUsage.limits.branches },
+          { label: "Services", used: planUsage.usage.services, limit: planUsage.limits.services },
+          { label: "Queues", used: planUsage.usage.queues, limit: planUsage.limits.queues },
+          { label: "Staff", used: planUsage.usage.staff_users, limit: planUsage.limits.staff_users },
+          { label: "Tickets today", used: planUsage.usage.tickets_today, limit: planUsage.limits.tickets_per_day },
+        ].map((resource) => <li key={resource.label} className={resource.limit !== null && resource.used >= resource.limit ? styles.atLimit : undefined}><span>{resource.label}</span><strong>{resource.used.toLocaleString("en-US")} <span>/ {resource.limit === null ? "Unlimited" : resource.limit.toLocaleString("en-US")}</span></strong></li>)}
+      </ul>
       {planUsage.subscription.expired ? (
         <PlanExpiredBanner subscription={planUsage.subscription} planName={planUsage.plan_name} />
       ) : (
@@ -952,65 +965,55 @@ function AdminDashboard() {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
-        <h1 className="text-2xl font-bold text-slate-800 mb-4">Admin Portal</h1>
+    <div className={`${styles.page} ${adminFont.variable}`}>
+      <div className={styles.dashboardHeader}>
+        <div className={styles.titleRow}><div><p className={styles.eyebrow}>YOUR WORKSPACE</p><h1>Admin Portal</h1></div>{user?.tenant_code && <span className={styles.workspaceCode}>Workspace <strong>{user.tenant_code}</strong></span>}</div>
         {planUsage && <CurrentPlan planUsage={planUsage} />}
-        <div className="flex space-x-2 border-b border-slate-200">
+        <nav className={styles.tabNav} aria-label="Admin sections">
           <button
+            type="button"
+            aria-pressed={activeTab === "qr"}
             onClick={() => setActiveTab("qr")}
-            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-all ${
-              activeTab === "qr"
-                ? "border-indigo-600 text-indigo-600 bg-white rounded-t-lg"
-                : "border-transparent text-slate-600 hover:text-slate-900"
-            }`}
+            className={activeTab === "qr" ? styles.activeTab : styles.tab}
           >
             <QrCode className="w-4 h-4" /> App QR Codes
           </button>
           <button
+            type="button"
+            aria-pressed={activeTab === "config"}
             onClick={() => setActiveTab("config")}
-            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-all ${
-              activeTab === "config"
-                ? "border-indigo-600 text-indigo-600 bg-white rounded-t-lg"
-                : "border-transparent text-slate-600 hover:text-slate-900"
-            }`}
+            className={activeTab === "config" ? styles.activeTab : styles.tab}
           >
             <Settings className="w-4 h-4" /> Configuration
           </button>
           <button
+            type="button"
+            aria-pressed={activeTab === "analytics"}
             onClick={() => setActiveTab("analytics")}
-            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-all ${
-              activeTab === "analytics"
-                ? "border-indigo-600 text-indigo-600 bg-white rounded-t-lg"
-                : "border-transparent text-slate-600 hover:text-slate-900"
-            }`}
+            className={activeTab === "analytics" ? styles.activeTab : styles.tab}
           >
             <BarChart3 className="w-4 h-4" /> Analytics Data
           </button>
           <button
+            type="button"
+            aria-pressed={activeTab === "customization"}
             onClick={() => setActiveTab("customization")}
-            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-all ${
-              activeTab === "customization"
-                ? "border-indigo-600 text-indigo-600 bg-white rounded-t-lg"
-                : "border-transparent text-slate-600 hover:text-slate-900"
-            }`}
+            className={activeTab === "customization" ? styles.activeTab : styles.tab}
           >
             <Palette className="w-4 h-4" /> Customization
           </button>
           <button
+            type="button"
+            aria-pressed={activeTab === "profile"}
             onClick={() => setActiveTab("profile")}
-            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-all ${
-              activeTab === "profile"
-                ? "border-indigo-600 text-indigo-600 bg-white rounded-t-lg"
-                : "border-transparent text-slate-600 hover:text-slate-900"
-            }`}
+            className={activeTab === "profile" ? styles.activeTab : styles.tab}
           >
             <UserRound className="w-4 h-4" /> Profile
           </button>
-        </div>
+        </nav>
       </div>
 
-      <div className="p-6">
+      <div className={styles.content}>
         {activeTab === "profile" && (
           <AdminProfile
             user={user}
@@ -1021,19 +1024,20 @@ function AdminDashboard() {
         )}
         {activeTab === "customization" && <ThemeCustomization accessToken={accessToken!} />}
         {activeTab === "qr" && (
-          <div className="grid md:grid-cols-2 gap-8">
-            <div className="p-6 border border-slate-200 rounded-xl bg-slate-50/50 flex flex-col items-center">
+          <div className={styles.qrGrid}>
+            <section className={styles.qrSection}>
               <h3 className="text-lg font-semibold text-slate-800 mb-2">
                 Staff Counter QR Code
               </h3>
               <p className="text-sm text-slate-500 mb-4 text-center">
                 Scan or download the QR code for staff counter portal.
               </p>
-              <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
+              <div className={styles.qrCanvas}>
                 <QRCodeSVG ref={staffQrRef} value={staffUrl} size={180} />
               </div>
               <input
                 type="text"
+                aria-label="Staff App URL"
                 value={staffUrl}
                 onChange={(e) => setStaffUrl(e.target.value)}
                 className="w-full text-sm p-2 border border-slate-300 rounded mb-4"
@@ -1045,20 +1049,21 @@ function AdminDashboard() {
               >
                 <Download className="w-4 h-4" /> Download Staff QR Code
               </button>
-            </div>
+            </section>
 
-            <div className="p-6 border border-slate-200 rounded-xl bg-slate-50/50 flex flex-col items-center">
+            <section className={styles.qrSection}>
               <h3 className="text-lg font-semibold text-slate-800 mb-2">
                 Customer App QR Code
               </h3>
               <p className="text-sm text-slate-500 mb-4 text-center">
                 Scan or download the QR code for customer queue booking.
               </p>
-              <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
+              <div className={styles.qrCanvas}>
                 <QRCodeSVG ref={customerQrRef} value={customerUrl} size={180} />
               </div>
               <input
                 type="text"
+                aria-label="Customer App URL"
                 value={customerUrl}
                 onChange={(e) => setCustomerUrl(e.target.value)}
                 className="w-full text-sm p-2 border border-slate-300 rounded mb-4"
@@ -1070,17 +1075,19 @@ function AdminDashboard() {
               >
                 <Download className="w-4 h-4" /> Download Customer QR Code
               </button>
-            </div>
+            </section>
           </div>
         )}
 
         {activeTab === "config" && (
           <div>
-            <div className="flex space-x-2 mb-6 border-b border-slate-200 pb-2">
+            <div className={styles.configNav} role="group" aria-label="Configuration sections">
               {(["branches", "services", "queues", "staff"] as const).map(
                 (cat) => (
                   <button
                     key={cat}
+                    type="button"
+                    aria-pressed={configSubTab === cat}
                     onClick={() => {
                       setConfigSubTab(cat);
                       setEditingBranchId(null);
@@ -1101,7 +1108,9 @@ function AdminDashboard() {
 
             {configSubTab === "branches" && (
               <div>
-                <form className="flex gap-2 mb-6 max-w-xl" onSubmit={addBranch}>
+                <form className={styles.createForm} onSubmit={addBranch}>
+                  <label className={styles.field}>
+                    Branch name
                   <input
                     type="text"
                     placeholder="Branch Name"
@@ -1112,6 +1121,9 @@ function AdminDashboard() {
                     required
                     className="p-2 text-sm border rounded w-1/2"
                   />
+                  </label>
+                  <label className={styles.field}>
+                    Branch code
                   <input
                     type="text"
                     placeholder="Branch Code"
@@ -1122,6 +1134,7 @@ function AdminDashboard() {
                     required
                     className="p-2 text-sm border rounded w-1/2"
                   />
+                  </label>
                   <button
                     type="submit"
                     disabled={isSavingBranch}
@@ -1243,12 +1256,14 @@ function AdminDashboard() {
             {configSubTab === "services" && (
               <div>
                 <form
-                  className="flex gap-2 mb-6 max-w-xl"
+                  className={styles.createForm}
                   onSubmit={(event) => {
                     event.preventDefault();
                     void saveService(serviceForm, null);
                   }}
                 >
+                  <label className={styles.field}>
+                    Service name
                   <input
                     type="text"
                     placeholder="Service Name"
@@ -1259,6 +1274,9 @@ function AdminDashboard() {
                     required
                     className="p-2 text-sm border rounded w-1/2"
                   />
+                  </label>
+                  <label className={styles.field}>
+                    Duration (minutes)
                   <input
                     type="number"
                     aria-label="Duration in minutes"
@@ -1276,6 +1294,7 @@ function AdminDashboard() {
                     required
                     className="p-2 text-sm border rounded w-1/2"
                   />
+                  </label>
                   <button
                     type="submit"
                     disabled={isSavingService}
@@ -1433,9 +1452,11 @@ function AdminDashboard() {
                     </label>
 
                     <form
-                      className="flex gap-2 max-w-xl mb-6"
+                      className={styles.createForm}
                       onSubmit={addQueue}
                     >
+                      <label className={styles.field}>
+                        Queue name
                       <input
                         type="text"
                         placeholder="Queue Name"
@@ -1444,6 +1465,9 @@ function AdminDashboard() {
                         required
                         className="p-2 text-sm border rounded w-1/2"
                       />
+                      </label>
+                      <label className={styles.field}>
+                        Selected branch
                       <input
                         type="text"
                         aria-label="Branch"
@@ -1451,6 +1475,7 @@ function AdminDashboard() {
                         readOnly
                         className="p-2 text-sm border rounded w-1/2 bg-slate-50 text-slate-500"
                       />
+                      </label>
                       <button
                         type="submit"
                         disabled={isSavingQueue}
@@ -1737,7 +1762,7 @@ function AdminDashboard() {
                     <section
                       aria-labelledby="staff-modal-title"
                       aria-modal="true"
-                      className="w-full max-w-xl rounded-xl border border-slate-200 bg-white shadow-2xl"
+                      className={`${styles.staffDialog} w-full max-w-xl rounded-xl border border-slate-200 bg-white shadow-2xl`}
                       role="dialog"
                     >
                       <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
@@ -2126,7 +2151,7 @@ export default function AdminPortal() {
   if (isLoading || !user || !accessToken) {
     return (
       <div
-        className="fixed inset-0 z-40 flex items-center justify-center"
+        className={`${styles.page} ${adminFont.variable} fixed inset-0 z-40 flex items-center justify-center`}
         role="status"
         aria-label="Checking your session"
       >
