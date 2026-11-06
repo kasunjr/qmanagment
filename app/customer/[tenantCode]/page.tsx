@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, Building2, Check, CheckCircle2, ChevronDown, Clock, Search, Ticket, UserRound } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Building2, Check, CheckCircle2, ChevronDown, Clock, Search, Ticket, UserRound, XCircle } from "lucide-react";
 import {
   DEFAULT_APP_THEME,
   themeStyle,
@@ -222,6 +222,8 @@ export default function CustomerPage({
   const [ticket, setTicket] = useState<QueueTicket | null>(null);
   const [isBooking, setIsBooking] = useState(false);
   const [bookError, setBookError] = useState("");
+  const [isRemovingTicket, setIsRemovingTicket] = useState(false);
+  const [removeTicketError, setRemoveTicketError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -456,6 +458,27 @@ export default function CustomerPage({
     setBookError("");
   };
 
+  const removeFromQueue = async () => {
+    if (!ticket || ticket.status !== "waiting" || isRemovingTicket) return;
+    if (!window.confirm("Remove this ticket from the queue? This cannot be undone.")) return;
+
+    setIsRemovingTicket(true);
+    setRemoveTicketError("");
+    try {
+      const response = await fetch(`/api/public/${tenantCode}/tickets/${ticket.id}`, {
+        method: "DELETE",
+      });
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error || "Unable to remove the ticket.");
+      storeTicket(null);
+      setTicket(null);
+    } catch (error) {
+      setRemoveTicketError(error instanceof Error ? error.message : "Unable to remove the ticket.");
+    } finally {
+      setIsRemovingTicket(false);
+    }
+  };
+
   if (isThemeLoading) {
     return (
       <div
@@ -645,7 +668,20 @@ export default function CustomerPage({
 
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-theme border border-theme-text/10 bg-theme-surface p-3 text-center">
-              <Clock aria-hidden="true" className="mx-auto mb-1 h-5 w-5 text-theme-primary/65" />
+              <div aria-hidden="true" className="mb-1 flex min-h-5 items-center justify-center gap-1 text-theme-primary">
+                {ticket.people_ahead === 0 ? (
+                  <CheckCircle2 className="h-5 w-5" />
+                ) : (
+                  <>
+                    {Array.from({ length: Math.min(ticket.people_ahead, 4) }, (_, index) => (
+                      <UserRound key={index} className="h-4 w-4" />
+                    ))}
+                    {ticket.people_ahead > 4 && (
+                      <span className="ml-1 text-xs font-semibold">+{ticket.people_ahead - 4}</span>
+                    )}
+                  </>
+                )}
+              </div>
               <div className="text-xs text-theme-text/60">People ahead</div>
               <div className="text-xl font-bold text-theme-text">
                 {ticket.people_ahead}
@@ -659,6 +695,25 @@ export default function CustomerPage({
               </div>
             </div>
           </div>
+
+          {ticket.status === "waiting" && (
+            <div className="space-y-2">
+              <button
+                className="flex min-h-10 w-full items-center justify-center gap-2 rounded-theme border border-theme-text/15 bg-theme-surface px-4 py-2 text-sm font-medium text-theme-text/70 transition hover:border-theme-secondary/30 hover:bg-theme-secondary/10 hover:text-theme-text disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isRemovingTicket}
+                onClick={() => void removeFromQueue()}
+                type="button"
+              >
+                <XCircle aria-hidden="true" className="h-4 w-4" />
+                {isRemovingTicket ? "Removing ticket..." : "Leave from queue"}
+              </button>
+              {removeTicketError && (
+                <p className="rounded-theme border border-theme-secondary/25 bg-theme-secondary/10 p-3 text-sm text-theme-text" role="alert">
+                  {removeTicketError}
+                </p>
+              )}
+            </div>
+          )}
 
           {ticket.status === "completed" && (
             <button
