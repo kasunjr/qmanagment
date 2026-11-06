@@ -1,13 +1,9 @@
 import { NextRequest } from "next/server";
-import { Client } from "pg";
-import { DAILY_LIMIT_CHANNEL } from "@/lib/plans";
 import { authenticateStaffRequest } from "@/lib/staff-auth";
-import { BRANCH_TICKETS_CHANNEL } from "@/lib/tickets";
+import { createQueueEventResponse } from "@/lib/queue-events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const encoder = new TextEncoder();
 
 export async function GET(request: NextRequest) {
   const staffUser = await authenticateStaffRequest(request);
@@ -17,86 +13,9 @@ export async function GET(request: NextRequest) {
   if (!staffUser.branch_id) {
     return new Response(null, { status: 204 });
   }
-  const branchId = staffUser.branch_id;
-
-  const client = new Client({ connectionString: process.env.DATABASE_URL });
-  try {
-    await client.connect();
-    await client.query(`LISTEN ${BRANCH_TICKETS_CHANNEL}`);
-    await client.query(`LISTEN ${DAILY_LIMIT_CHANNEL}`);
-  } catch (error) {
-    await client.end().catch(() => {});
-    console.error("Staff queue event subscription failed:", error);
-    return new Response("Unable to subscribe to queue events.", { status: 500 });
-  }
-
-  let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
-  let closed = false;
-  const heartbeat = setInterval(() => {
-    if (!closed) {
-      try {
-        streamController?.enqueue(encoder.encode(": keepalive\n\n"));
-      } catch {
-        void close();
-      }
-    }
-  }, 25_000);
-
-  const close = async () => {
-    if (closed) return;
-    closed = true;
-    clearInterval(heartbeat);
-    request.signal.removeEventListener("abort", onAbort);
-    client.off("notification", onNotification);
-    client.off("error", onError);
-    await client.end().catch(() => {});
-  };
-  const onAbort = () => void close();
-  const onNotification = (notification: { channel?: string; payload?: string }) => {
-    let event: string;
-    // Any ticket created, called or completed in the branch can change this counter's lists.
-    if (notification.channel === BRANCH_TICKETS_CHANNEL && notification.payload === branchId) {
-      event = "tickets-updated";
-    } else if (notification.channel === DAILY_LIMIT_CHANNEL && notification.payload === staffUser.tenant_code) {
-      event = "daily-limit-changed";
-    } else {
-      return;
-    }
-    try {
-      streamController?.enqueue(encoder.encode(`event: ${event}\ndata: {}\n\n`));
-    } catch {
-      void close();
-    }
-  };
-  const onError = (error: Error) => {
-    console.error("Staff queue event stream failed:", error);
-    try {
-      streamController?.error(error);
-    } catch {
-      // The stream may already be closed by the client.
-    }
-    void close();
-  };
-
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      streamController = controller;
-      client.on("notification", onNotification);
-      client.on("error", onError);
-      request.signal.addEventListener("abort", onAbort, { once: true });
-      controller.enqueue(encoder.encode("event: ready\ndata: {}\n\n"));
-    },
-    cancel() {
-      void close();
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
-  });
+  return createQueueEventResponse(
+    request,
+    staffUser.branch_id,
+    staffUser.tenant_code,
+  );
 }

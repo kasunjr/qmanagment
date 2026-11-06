@@ -49,16 +49,16 @@ Public signup always creates a regular `user`; it cannot assign or modify an adm
 
 All request and response bodies are JSON. Login and signup return a 15-minute access JWT in the response body, set the bearer token in browser memory, and set a matching HttpOnly cookie scoped to `/admin`. The refresh token is stored in a 30-day HttpOnly, SameSite=Strict cookie. Middleware verifies the access cookie before serving `/admin`; refresh rotates both tokens, and logout revokes the refresh token and clears both cookies. Passwords must be 12-72 UTF-8 bytes.
 
-| Method and path | Purpose |
-| --- | --- |
-| `POST /api/auth/signup` | Create a regular account and session. Body: `{"email":"person@example.com","password":"at-least-12-chars"}` |
-| `POST /api/auth/login` | Verify credentials and create a session; invalid credentials return `401`. |
-| `GET /api/auth/google/start` | Start Google OAuth sign-in, optionally preserving a same-origin `next` path. |
-| `GET /api/auth/google/callback` | Complete Google OAuth sign-in and apply the configured email-code second step. |
-| `POST /api/auth/refresh` | Rotate the refresh cookie and return a new access JWT. |
-| `POST /api/auth/logout` | Revoke the refresh token and clear its cookie. |
-| `GET /api/auth/me` | Return the current user; requires a bearer access token. |
-| `GET /api/admin/session` | Verify authenticated access; returns `401` without a valid token. Both supported roles are accepted. |
+| Method and path                 | Purpose                                                                                                     |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `POST /api/auth/signup`         | Create a regular account and session. Body: `{"email":"person@example.com","password":"at-least-12-chars"}` |
+| `POST /api/auth/login`          | Verify credentials and create a session; invalid credentials return `401`.                                  |
+| `GET /api/auth/google/start`    | Start Google OAuth sign-in, optionally preserving a same-origin `next` path.                                |
+| `GET /api/auth/google/callback` | Complete Google OAuth sign-in and apply the configured email-code second step.                              |
+| `POST /api/auth/refresh`        | Rotate the refresh cookie and return a new access JWT.                                                      |
+| `POST /api/auth/logout`         | Revoke the refresh token and clear its cookie.                                                              |
+| `GET /api/auth/me`              | Return the current user; requires a bearer access token.                                                    |
+| `GET /api/admin/session`        | Verify authenticated access; returns `401` without a valid token. Both supported roles are accepted.        |
 
 ### Staff Users and Staff Authentication
 
@@ -68,26 +68,34 @@ Creating a staff user sends a MyTurn welcome email containing their username, co
 
 Email is sent after the staff record and service assignments commit, with the database connection released first. The creation response remains `201` if delivery fails: it includes `staffUser`, `welcomeEmailSent: false`, and a `warning`. The admin portal displays that warning; do not create the user again just to retry delivery. Successful delivery returns `welcomeEmailSent: true`.
 
-| Method and path | Purpose |
-| --- | --- |
-| `GET /api/staff-users` | List staff users for the authenticated account's tenant, including `branch_id`, `counter_name` and `service_ids`. |
-| `POST /api/staff-users` | Create a staff user and send a welcome QR email. Required JSON: `name`, `username`, `email`, `code`, `counter_name` (up to 60 characters); `role` is optional and defaults to `Agent`. Optional `branch_id` and `service_ids` set up the counter. Returns the created `staffUser` and `welcomeEmailSent`, with a `warning` if delivery failed. |
-| `GET /api/staff-users/{id}` | Retrieve one staff user in the authenticated account's tenant, including `branch_id`, `counter_name` and `service_ids`. |
-| `PATCH /api/staff-users/{id}` | Update staff fields; send `code` only to replace the staff code. Optional `branch_id` and `counter_name` (pass `null` to clear) and `service_ids` (replaces the list). |
-| `DELETE /api/staff-users/{id}` | Delete a staff user in the authenticated account's tenant. |
-| `POST /api/staff-auth/login` | Staff login. JSON body: `{"tenant_code":"75050B6","username":"agent1","code":"staff-code"}`. Tenant code and username must match. Success sets staff-only HttpOnly cookies. |
-| `GET /api/staff-auth/me` | Verify the staff session and return the safe staff profile. Accepts the staff cookie or a staff bearer token. |
-| `GET /api/staff/queue` | Return the staff member's counter (`name`, `branch_name`, `services`) and today's tickets: the branch's waiting tickets for the counter's services, plus the counter's own serving and completed tickets. Returns `counter: null` and an empty ticket list when no branch is assigned. |
-| `GET /api/staff/queue/events` | Authenticated server-sent event stream. Sends `tickets-updated` when a ticket in the staff member's branch is created, called or completed. |
-| `POST /api/staff/queue/next` | Call the longest-waiting ticket in the counter's branch among the services it serves, changing it from `waiting` to `serving` and recording the counter. Returns `409` if the counter has no branch, is already serving, or no ticket is waiting. |
-| `POST /api/staff/queue/complete` | Complete the counter's serving ticket. It does not call the next ticket; the counter stays free until `POST /api/staff/queue/next`. Returns `409` if the counter has no serving ticket. |
-| `POST /api/staff-auth/logout` | Clear only the staff authentication and tenant cookies. |
+| Method and path                  | Purpose                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/staff-users`           | List staff users for the authenticated account's tenant, including `branch_id`, `counter_name` and `service_ids`.                                                                                                                                                                                                                              |
+| `POST /api/staff-users`          | Create a staff user and send a welcome QR email. Required JSON: `name`, `username`, `email`, `code`, `counter_name` (up to 60 characters); `role` is optional and defaults to `Agent`. Optional `branch_id` and `service_ids` set up the counter. Returns the created `staffUser` and `welcomeEmailSent`, with a `warning` if delivery failed. |
+| `GET /api/staff-users/{id}`      | Retrieve one staff user in the authenticated account's tenant, including `branch_id`, `counter_name` and `service_ids`.                                                                                                                                                                                                                        |
+| `PATCH /api/staff-users/{id}`    | Update staff fields; send `code` only to replace the staff code. Optional `branch_id` and `counter_name` (pass `null` to clear) and `service_ids` (replaces the list).                                                                                                                                                                         |
+| `DELETE /api/staff-users/{id}`   | Delete a staff user in the authenticated account's tenant.                                                                                                                                                                                                                                                                                     |
+| `POST /api/staff-auth/login`     | Staff login. JSON body: `{"tenant_code":"75050B6","username":"agent1","code":"staff-code"}`. Tenant code and username must match. Success sets staff-only HttpOnly cookies.                                                                                                                                                                    |
+| `GET /api/staff-auth/me`         | Verify the staff session and return the safe staff profile. Accepts the staff cookie or a staff bearer token.                                                                                                                                                                                                                                  |
+| `GET /api/staff/queue`           | Return the staff member's counter (`name`, `branch_name`, `services`) and today's tickets: the branch's waiting tickets for the counter's services, plus the counter's own serving and completed tickets. Returns `counter: null` and an empty ticket list when no branch is assigned.                                                         |
+| `GET /api/staff/queue/events`    | Authenticated server-sent event stream. Sends `tickets-updated` when a ticket in the staff member's branch is created, called or completed.                                                                                                                                                                                                    |
+| `POST /api/staff/queue/next`     | Call the longest-waiting ticket in the counter's branch among the services it serves, changing it from `waiting` to `serving` and recording the counter. Returns `409` if the counter has no branch, is already serving, or no ticket is waiting.                                                                                              |
+| `POST /api/staff/queue/complete` | Complete the counter's serving ticket. It does not call the next ticket; the counter stays free until `POST /api/staff/queue/next`. Returns `409` if the counter has no serving ticket.                                                                                                                                                        |
+| `POST /api/staff-auth/logout`    | Clear only the staff authentication and tenant cookies.                                                                                                                                                                                                                                                                                        |
 
 Staff JWTs use `JWT_STAFF_ACCESS_SECRET`, a separate issuer/audience, and an 8-hour lifetime. Account tokens cannot authenticate staff sessions, and staff tokens cannot authenticate account endpoints. `/staff/{tenantCode}` is the tenant-specific staff login page. Successful login redirects to `/staff`, which is protected by middleware; without a valid staff JWT, requests are redirected to the remembered tenant login page or `/` if no tenant is known. The shared navbar hides the Admin Portal/account controls on staff routes and shows staff logout only for a verified staff session.
 
 The staff login and `/api/staff-auth/me` responses also include `branch_id`, `counter_name` and `service_ids`. A staff user is a counter: it belongs to one branch and serves any number of services, and a service can be served by any number of counters. The API enforces tenant boundaries, and the database allows a counter only one serving ticket at a time.
 
 The admin staff-user screen uses these endpoints. The staff counter page reads the counter and its current-day tickets from `GET /api/staff/queue`, refreshes immediately on `tickets-updated` events, calls the longest-waiting customer with `POST /api/staff/queue/next`, and finishes the serving ticket with `POST /api/staff/queue/complete`. Finish and Call next are separate buttons: finishing leaves the counter free until staff call the next customer. Two counters calling at the same moment never get the same ticket.
+
+#### Live Queue Events
+
+The SSE endpoint uses PostgreSQL `LISTEN/NOTIFY`, which requires a persistent database session. A transaction-mode pooler cannot reliably deliver these notifications. Keep `DATABASE_URL` for normal queries and set `DIRECT_DATABASE_URL` to a direct PostgreSQL connection URL (or a session-mode pooler URL) in `.env.local` and your deployment environment. Both URLs must connect to the same database. For Neon URLs ending in `.neon.tech`, the SSE endpoint automatically removes the `-pooler` host suffix when no override is set. Local PostgreSQL needs no override.
+
+The stream emits `ready`, `tickets-updated`, and `daily-limit-changed` as named events; use `EventSource.addEventListener` rather than `onmessage` to receive them. Restart or redeploy after changing environment variables. The hosting platform must support streaming responses, and reverse proxies must not buffer this endpoint. If a platform limits request duration, the browser reconnects automatically and reloads the queue when the connection opens.
+
+Run the SSE regression checks with `node --test tests/staff-queue-events.test.mjs`.
 
 ### Branches and Services
 
@@ -97,26 +105,26 @@ These routes back the admin Configurations tab. All of them require the account 
 - Counters are staff users (see above). Each has a branch and the services it serves, stored in `staff_user_services`.
 - A service can be booked at a branch only when at least one counter in that branch serves it. Its tickets wait in one virtual queue per branch and service, and any of those counters can call them.
 
-| Method and path | Purpose |
-| --- | --- |
-| `GET /api/branches` | List the tenant's branches. |
-| `POST /api/branches` | Create a branch. Body: `{"name":"Downtown","code":"DT01"}`. `code` is unique per tenant and stored uppercase. |
-| `PATCH /api/branches/{id}` | Update `name` and/or `code`. |
-| `DELETE /api/branches/{id}` | Delete a branch, with its tickets. Its staff users are kept with no branch. |
-| `GET /api/services` | List the tenant's services. |
-| `POST /api/services` | Create a service. Body: `{"name":"Loans","description":"Personal and home loans","duration_minutes":20}`; `description` is optional (up to 500 characters, default empty) and `duration_minutes` is optional (1-1440, default 15). `name` is unique per tenant. |
-| `PATCH /api/services/{id}` | Update `name`, `description` and/or `duration_minutes`. |
-| `DELETE /api/services/{id}` | Delete a service, with its counter assignments and tickets. |
+| Method and path             | Purpose                                                                                                                                                                                                                                                         |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/branches`         | List the tenant's branches.                                                                                                                                                                                                                                     |
+| `POST /api/branches`        | Create a branch. Body: `{"name":"Downtown","code":"DT01"}`. `code` is unique per tenant and stored uppercase.                                                                                                                                                   |
+| `PATCH /api/branches/{id}`  | Update `name` and/or `code`.                                                                                                                                                                                                                                    |
+| `DELETE /api/branches/{id}` | Delete a branch, with its tickets. Its staff users are kept with no branch.                                                                                                                                                                                     |
+| `GET /api/services`         | List the tenant's services.                                                                                                                                                                                                                                     |
+| `POST /api/services`        | Create a service. Body: `{"name":"Loans","description":"Personal and home loans","duration_minutes":20}`; `description` is optional (up to 500 characters, default empty) and `duration_minutes` is optional (1-1440, default 15). `name` is unique per tenant. |
+| `PATCH /api/services/{id}`  | Update `name`, `description` and/or `duration_minutes`.                                                                                                                                                                                                         |
+| `DELETE /api/services/{id}` | Delete a service, with its counter assignments and tickets.                                                                                                                                                                                                     |
 
 ### Customer Portal (Public)
 
 These routes need no login. The tenant is identified by the 7-character tenant code in the path; an unknown code returns `404`. Only display fields are returned.
 
-| Method and path | Purpose |
-| --- | --- |
-| `GET /api/public/{tenantCode}/booking-options` | Bookable branches (`id`, `name`, `code`, `service_ids`) and services (`id`, `name`, `description`, `duration_minutes`) a customer can choose from. A branch is listed only if at least one of its counters serves a service; its `service_ids` are the services bookable at that branch. |
-| `POST /api/public/{tenantCode}/tickets` | Create a ticket. Body: `{"customer_name":"John Doe","branch_id":"<branch id>","service_id":"<service id>"}`. Returns `201` with the ticket; `400` for invalid input; `404` if the branch or service is not in the tenant, or no counter in that branch serves the service. |
-| `GET /api/public/{tenantCode}/tickets/{ticketId}` | Current state of a ticket created today. Returns `404` for an unknown ticket or one from a previous day. |
+| Method and path                                   | Purpose                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/public/{tenantCode}/booking-options`    | Bookable branches (`id`, `name`, `code`, `service_ids`) and services (`id`, `name`, `description`, `duration_minutes`) a customer can choose from. A branch is listed only if at least one of its counters serves a service; its `service_ids` are the services bookable at that branch. |
+| `POST /api/public/{tenantCode}/tickets`           | Create a ticket. Body: `{"customer_name":"John Doe","branch_id":"<branch id>","service_id":"<service id>"}`. Returns `201` with the ticket; `400` for invalid input; `404` if the branch or service is not in the tenant, or no counter in that branch serves the service.               |
+| `GET /api/public/{tenantCode}/tickets/{ticketId}` | Current state of a ticket created today. Returns `404` for an unknown ticket or one from a previous day.                                                                                                                                                                                 |
 
 A ticket response contains `id`, `ticket_number`, `customer_name`, `status`, `branch_name`, `service_name`, `counter_name`, `people_ahead` and `created_at`.
 
@@ -125,7 +133,11 @@ A ticket response contains `id`, `ticket_number`, `customer_name`, `status`, `br
 - **Status**: `waiting`, `serving` or `completed`. New tickets are `waiting`; a counter's call sets `serving`, and completing sets `completed`.
 - **People ahead**: waiting tickets for the same service at the same branch on the same day with a lower number.
 
-The customer page at `/customer/{tenantCode}` stores the ticket in the browser's local storage under `qms_ticket_{tenantCode}` so it survives a reload. On load it refreshes the ticket from the server; a ticket that is completed, missing or from a previous day is removed from local storage. It does not refresh on its own; a called ticket shows "Please go to {counter name}" after a reload. "Book Another Ticket" is shown only for a completed ticket.
+The customer page at `/customer/{tenantCode}` stores the ticket in the browser's local storage under `qms_ticket_{tenantCode}` so it survives a reload. Newly booked and restored tickets subscribe to live SSE updates and refresh their status, counter name, and people ahead automatically. Reconnecting reloads the current ticket, with a 60-second fallback refresh if streaming is unavailable. A completed ticket stays visible but is removed from local storage and stops streaming; a missing ticket or one from a previous day returns the page to the booking form. "Book Another Ticket" is shown only for a completed ticket.
+
+The public SSE endpoint is `GET /api/public/{tenantCode}/tickets/{ticketId}/events`. It validates the ticket's tenant and current date before subscribing to its branch's changes. Named `tickets-updated` events contain no customer or ticket details; the page reloads its own ticket through the existing ticket endpoint. Both customer and staff streams use the direct database connection configuration described in Live Queue Events above.
+
+Run the customer live-update checks with `node --test tests/customer-*.test.mjs`.
 
 The ticket routes are public and not rate limited: anyone with the tenant link can create tickets.
 
@@ -147,13 +159,13 @@ The admin page is guarded by middleware and the client session provider. Admin A
 
 ## Available Commands
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev` | Run the local development server. |
-| `npm run lint` | Run the Next.js lint command; the project currently has no ESLint configuration, so this opens interactive setup. |
-| `npm run build` | Create an optimized production build. |
-| `npm start` | Serve the production build; run `npm run build` first. |
-| `npm run db:migrate` | Apply pending SQL files from `migrations/` using `DATABASE_URL`. |
+| Command              | Purpose                                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`        | Run the local development server.                                                                                 |
+| `npm run lint`       | Run the Next.js lint command; the project currently has no ESLint configuration, so this opens interactive setup. |
+| `npm run build`      | Create an optimized production build.                                                                             |
+| `npm start`          | Serve the production build; run `npm run build` first.                                                            |
+| `npm run db:migrate` | Apply pending SQL files from `migrations/` using `DATABASE_URL`.                                                  |
 
 To test the production server locally:
 
@@ -221,14 +233,14 @@ tsconfig.json          TypeScript configuration and @/* import alias
 
 The application uses the Next.js App Router. Each folder under `app/` maps to a URL route:
 
-| Route | Page |
-| --- | --- |
-| `/` | Home |
+| Route                    | Page                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `/`                      | Home                                                                              |
 | `/customer/{tenantCode}` | Customer queue portal for the tenant identified by its 7-character code; no login |
-| `/staff/{tenantCode}` | Staff login for the tenant identified by its 7-character code |
-| `/staff` | Protected staff counter terminal; requires a staff session |
-| `/admin` | Admin portal |
-| `/pricing` | Pricing plans |
+| `/staff/{tenantCode}`    | Staff login for the tenant identified by its 7-character code                     |
+| `/staff`                 | Protected staff counter terminal; requires a staff session                        |
+| `/admin`                 | Admin portal                                                                      |
+| `/pricing`               | Pricing plans                                                                     |
 
 ## Basic Development Guide
 

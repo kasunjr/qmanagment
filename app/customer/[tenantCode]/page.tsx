@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Ticket, Clock, CheckCircle2 } from "lucide-react";
-import { DEFAULT_APP_THEME, themeStyle, type AppTheme } from "@/lib/theme-style";
+import {
+  DEFAULT_APP_THEME,
+  themeStyle,
+  type AppTheme,
+} from "@/lib/theme-style";
 
 interface Branch {
   id: string;
@@ -28,7 +32,8 @@ interface QueueTicket {
   people_ahead: number;
 }
 
-const DAILY_LIMIT_MESSAGE = "No more tickets are available today. Please try again tomorrow.";
+const DAILY_LIMIT_MESSAGE =
+  "No more tickets are available today. Please try again tomorrow.";
 
 export default function CustomerPage({
   params,
@@ -57,7 +62,9 @@ export default function CustomerPage({
       signal: controller.signal,
     })
       .then(async (response) => {
-        const result = (await response.json().catch(() => null)) as { theme?: AppTheme } | null;
+        const result = (await response.json().catch(() => null)) as {
+          theme?: AppTheme;
+        } | null;
         if (response.ok && result?.theme) setTheme(result.theme);
       })
       .catch(() => {});
@@ -80,10 +87,13 @@ export default function CustomerPage({
       setIsLoading(true);
       setLoadError("");
       try {
-        const response = await fetch(`/api/public/${tenantCode}/booking-options`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
+        const response = await fetch(
+          `/api/public/${tenantCode}/booking-options`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
         const result = (await response.json().catch(() => null)) as {
           branches?: Branch[];
           services?: Service[];
@@ -102,7 +112,11 @@ export default function CustomerPage({
         setAcceptingTickets(result?.accepting_tickets ?? true);
       } catch (error) {
         if (!controller.signal.aborted) {
-          setLoadError(error instanceof Error ? error.message : "Unable to load booking options.");
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load booking options.",
+          );
         }
       } finally {
         if (!controller.signal.aborted) setIsLoading(false);
@@ -116,61 +130,102 @@ export default function CustomerPage({
   const ticketStorageKey = `qms_ticket_${tenantCode}`;
   const selectedService = services.find((s) => s.id === serviceId);
   // Only services added to a queue in the selected branch can be booked there.
-  const branchServiceIds = branches.find((b) => b.id === branchId)?.service_ids ?? [];
-  const branchServices = services.filter((s) => branchServiceIds.includes(s.id));
+  const branchServiceIds =
+    branches.find((b) => b.id === branchId)?.service_ids ?? [];
+  const branchServices = services.filter((s) =>
+    branchServiceIds.includes(s.id),
+  );
 
   // Local storage can be unavailable (private mode, blocked site data); the page works without it.
   const storeTicket = (value: QueueTicket | null) => {
     try {
-      if (value) window.localStorage.setItem(ticketStorageKey, JSON.stringify(value));
+      if (value)
+        window.localStorage.setItem(ticketStorageKey, JSON.stringify(value));
       else window.localStorage.removeItem(ticketStorageKey);
     } catch {
       // Ignored: the ticket is still shown, it just will not survive a reload.
     }
   };
 
-  // Restores the ticket saved by this browser, then refreshes it from the server.
   useEffect(() => {
+    setTicket(null);
     let saved: QueueTicket | null = null;
     try {
-      saved = JSON.parse(window.localStorage.getItem(ticketStorageKey) ?? "null") as QueueTicket | null;
+      saved = JSON.parse(
+        window.localStorage.getItem(ticketStorageKey) ?? "null",
+      ) as QueueTicket | null;
     } catch {
       saved = null;
     }
     if (!saved || typeof saved.id !== "string") return;
 
-    const savedId = saved.id;
     setTicket(saved);
+  }, [tenantCode]);
+
+  const activeTicketId = ticket?.status === "completed" ? null : ticket?.id;
+
+  useEffect(() => {
+    if (!activeTicketId) return;
     const controller = new AbortController();
+    let refreshInFlight = false;
+    let refreshPending = false;
 
     const refreshTicket = async () => {
+      if (controller.signal.aborted) return;
+      if (refreshInFlight) {
+        refreshPending = true;
+        return;
+      }
+      refreshInFlight = true;
+      refreshPending = false;
       try {
-        const response = await fetch(`/api/public/${tenantCode}/tickets/${savedId}`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
+        const response = await fetch(
+          `/api/public/${tenantCode}/tickets/${activeTicketId}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
         const result = (await response.json().catch(() => null)) as {
           ticket?: QueueTicket;
         } | null;
+        if (controller.signal.aborted) return;
 
         // Gone or from a previous day: forget it and show the form again.
         if (response.status === 404) {
           storeTicket(null);
-          setTicket((current) => (current?.id === savedId ? null : current));
+          setTicket((current) =>
+            current?.id === activeTicketId ? null : current,
+          );
         } else if (response.ok && result?.ticket) {
           const fresh = result.ticket;
           // A completed ticket is shown this once but no longer kept.
           storeTicket(fresh.status === "completed" ? null : fresh);
-          setTicket((current) => (current?.id === savedId ? fresh : current));
+          setTicket((current) =>
+            current?.id === activeTicketId ? fresh : current,
+          );
         }
       } catch {
         // Offline or server error: keep showing the saved ticket.
+      } finally {
+        refreshInFlight = false;
+        if (refreshPending && !controller.signal.aborted) void refreshTicket();
       }
     };
 
     void refreshTicket();
-    return () => controller.abort();
-  }, [tenantCode]);
+    const events = new EventSource(
+      `/api/public/${tenantCode}/tickets/${activeTicketId}/events`,
+    );
+    events.addEventListener("open", refreshTicket);
+    events.addEventListener("tickets-updated", refreshTicket);
+    const refreshInterval = window.setInterval(refreshTicket, 60_000);
+    return () => {
+      controller.abort();
+      events.close();
+      window.clearInterval(refreshInterval);
+    };
+  }, [tenantCode, activeTicketId]);
 
   const handleBook = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -202,7 +257,9 @@ export default function CustomerPage({
       setTicket(result.ticket);
       storeTicket(result.ticket);
     } catch (error) {
-      setBookError(error instanceof Error ? error.message : "Unable to create ticket.");
+      setBookError(
+        error instanceof Error ? error.message : "Unable to create ticket.",
+      );
     } finally {
       setIsBooking(false);
     }
@@ -225,31 +282,48 @@ export default function CustomerPage({
       <div className="mb-6 flex items-center gap-3 border-b border-theme-text/10 pb-4">
         {theme.logo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img alt="" className="h-9 w-9 shrink-0 rounded-theme object-contain" src={theme.logo_url} />
+          <img
+            alt=""
+            className="h-9 w-9 shrink-0 rounded-theme object-contain"
+            src={theme.logo_url}
+          />
         ) : (
           <Ticket className="h-8 w-8 shrink-0 text-theme-primary" />
         )}
         <div>
-          <h1 className="text-2xl font-bold text-theme-text">Customer Queue Portal</h1>
-          <p className="text-sm text-theme-text/60">Get a digital queue ticket instantly</p>
+          <h1 className="text-2xl font-bold text-theme-text">
+            Customer Queue Portal
+          </h1>
+          <p className="text-sm text-theme-text/60">
+            Get a digital queue ticket instantly
+          </p>
         </div>
       </div>
 
       {isLoading ? (
         <p className="text-sm text-theme-text/60">Loading booking options...</p>
       ) : loadError ? (
-        <p className="text-sm text-red-500" role="alert">{loadError}</p>
+        <p className="text-sm text-red-500" role="alert">
+          {loadError}
+        </p>
       ) : branches.length === 0 || services.length === 0 ? (
         <p className="text-sm text-slate-500">Booking is not available yet.</p>
       ) : !ticket && !acceptingTickets ? (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-center" role="status">
+        <div
+          className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-center"
+          role="status"
+        >
           <Clock className="w-6 h-6 text-amber-600 mx-auto mb-2" />
-          <p className="text-sm font-medium text-amber-800">{DAILY_LIMIT_MESSAGE}</p>
+          <p className="text-sm font-medium text-amber-800">
+            {DAILY_LIMIT_MESSAGE}
+          </p>
         </div>
       ) : !ticket ? (
         <form onSubmit={handleBook} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-theme-text/80">Your Full Name</label>
+            <label className="mb-1 block text-sm font-medium text-theme-text/80">
+              Your Full Name
+            </label>
             <input
               type="text"
               required
@@ -261,7 +335,9 @@ export default function CustomerPage({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-theme-text/80">Select Branch</label>
+            <label className="mb-1 block text-sm font-medium text-theme-text/80">
+              Select Branch
+            </label>
             <select
               required
               value={branchId}
@@ -281,7 +357,9 @@ export default function CustomerPage({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-theme-text/80">Select Service</label>
+            <label className="mb-1 block text-sm font-medium text-theme-text/80">
+              Select Service
+            </label>
             <select
               required
               disabled={!branchId}
@@ -289,7 +367,9 @@ export default function CustomerPage({
               onChange={(e) => setServiceId(e.target.value)}
               className="w-full rounded-theme border border-theme-text/20 bg-theme-surface p-2.5 text-sm text-theme-text focus:border-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <option value="">{branchId ? "Select a service" : "Select a branch first"}</option>
+              <option value="">
+                {branchId ? "Select a service" : "Select a branch first"}
+              </option>
               {branchServices.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -303,7 +383,11 @@ export default function CustomerPage({
             )}
           </div>
 
-          {bookError && <p className="text-sm text-red-500" role="alert">{bookError}</p>}
+          {bookError && (
+            <p className="text-sm text-red-500" role="alert">
+              {bookError}
+            </p>
+          )}
 
           <button
             type="submit"
@@ -316,19 +400,32 @@ export default function CustomerPage({
       ) : (
         <div className="text-center space-y-6">
           <div className="rounded-theme-lg border border-theme-primary/25 bg-theme-primary/10 p-6">
-            <span className="text-xs font-bold uppercase tracking-widest text-theme-primary">Your Ticket Number</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-theme-primary">
+              Your Ticket Number
+            </span>
             <div className="my-2 text-5xl font-extrabold text-theme-primary">
               A {String(ticket.ticket_number).padStart(3, "0")}
             </div>
-            <p className="text-sm font-medium text-theme-text">Name: {ticket.customer_name}</p>
-            <p className="text-sm font-medium text-theme-text">Branch: {ticket.branch_name}</p>
-            <p className="text-sm font-medium text-theme-text">Service: {ticket.service_name}</p>
+            <p className="text-sm font-medium text-theme-text">
+              Name: {ticket.customer_name}
+            </p>
+            <p className="text-sm font-medium text-theme-text">
+              Branch: {ticket.branch_name}
+            </p>
+            <p className="text-sm font-medium text-theme-text">
+              Service: {ticket.service_name}
+            </p>
           </div>
 
           {ticket.status === "serving" && (
-            <div className="rounded-theme-lg bg-theme-secondary p-4 text-theme-on-secondary" role="status">
+            <div
+              className="rounded-theme-lg bg-theme-secondary p-4 text-theme-on-secondary"
+              role="status"
+            >
               <p className="text-lg font-bold">
-                {ticket.counter_name ? `Please go to ${ticket.counter_name}` : "It's your turn"}
+                {ticket.counter_name
+                  ? `Please go to ${ticket.counter_name}`
+                  : "It's your turn"}
               </p>
             </div>
           )}
@@ -337,12 +434,16 @@ export default function CustomerPage({
             <div className="rounded-theme border border-theme-text/10 bg-theme-surface p-4 text-center">
               <Clock className="mx-auto mb-1 h-5 w-5 text-theme-text/40" />
               <div className="text-xs text-theme-text/60">People Ahead</div>
-              <div className="text-xl font-bold text-theme-text">{ticket.people_ahead}</div>
+              <div className="text-xl font-bold text-theme-text">
+                {ticket.people_ahead}
+              </div>
             </div>
             <div className="rounded-theme border border-theme-text/10 bg-theme-surface p-4 text-center">
               <CheckCircle2 className="mx-auto mb-1 h-5 w-5 text-theme-secondary" />
               <div className="text-xs text-theme-text/60">Status</div>
-              <div className="text-sm font-bold capitalize text-theme-secondary">{ticket.status}</div>
+              <div className="text-sm font-bold capitalize text-theme-secondary">
+                {ticket.status}
+              </div>
             </div>
           </div>
 
