@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { authenticateRequest, hashLoginCode } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { sendSignupVerificationCode } from "@/lib/email";
+import { sendEmailChangeVerificationCode } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      await sendSignupVerificationCode(nextChallenge.email, nextChallenge.code);
+      await sendEmailChangeVerificationCode(nextChallenge.email, nextChallenge.code);
       return NextResponse.json({ challengeId: nextChallenge.id });
     } catch (error) {
       console.error("Unable to send email change verification code:", error);

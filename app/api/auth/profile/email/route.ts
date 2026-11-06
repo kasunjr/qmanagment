@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { authenticateRequest, hashLoginCode, normalizeEmail, verifyPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { sendSignupVerificationCode } from "@/lib/email";
+import { sendEmailChangeVerificationCode } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      await sendSignupVerificationCode(email, code);
+      await sendEmailChangeVerificationCode(email, code);
     } catch (error) {
       await db.query("DELETE FROM email_change_codes WHERE id = $1", [id]);
       console.error("Email change verification send failed:", error);
