@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { themeStyle, type AppTheme } from "@/lib/theme-style";
+import { DEFAULT_APP_THEME, themeStyle, type AppTheme } from "@/lib/theme-style";
 import styles from "./Navbar.module.css";
 import logo from "@/app/assets/logo.png";
 
@@ -62,13 +62,19 @@ export default function Navbar() {
   ];
 
   useEffect(() => {
-    if (!isStaffRoute) {
+    if (!isStaffRoute || pathname === "/staff") {
       setIsStaffAuthenticated(false);
       setStaffBrand(null);
       return;
     }
 
     const controller = new AbortController();
+    const publicThemeRequest = staffTenantCode
+      ? fetch(`/api/public/${staffTenantCode}/theme`, {
+          cache: "no-store",
+          signal: controller.signal,
+        }).catch(() => null)
+      : null;
     fetch("/api/staff-auth/me", {
       credentials: "same-origin",
       cache: "no-store",
@@ -76,24 +82,26 @@ export default function Navbar() {
     })
       .then(async (response) => {
         setIsStaffAuthenticated(response.ok);
-        const themeUrl = response.ok
-          ? "/api/staff/theme"
-          : staffTenantCode
-            ? `/api/public/${staffTenantCode}/theme`
+        const themeResponse = staffTenantCode
+          ? await publicThemeRequest
+          : response.ok
+            ? await fetch("/api/staff/theme", {
+                cache: "no-store",
+                signal: controller.signal,
+              })
             : null;
-        if (!themeUrl) {
-          setStaffBrand(null);
+        if (!themeResponse) {
+          setStaffBrand(staffTenantCode ? DEFAULT_APP_THEME : null);
           return;
         }
-        const themeResponse = await fetch(themeUrl, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
         const result = (await themeResponse.json().catch(() => null)) as { theme?: AppTheme } | null;
-        setStaffBrand(themeResponse.ok && result?.theme ? result.theme : null);
+        setStaffBrand(themeResponse.ok && result?.theme ? result.theme : staffTenantCode ? DEFAULT_APP_THEME : null);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setIsStaffAuthenticated(false);
+        if (!controller.signal.aborted) {
+          setIsStaffAuthenticated(false);
+          if (staffTenantCode) setStaffBrand(DEFAULT_APP_THEME);
+        }
       });
 
     return () => controller.abort();
@@ -148,10 +156,13 @@ export default function Navbar() {
 
   const tenantBrand = isStaffRoute ? staffBrand : customerBrand;
   const isPublicNav = !isStaffRoute && !customerTenantCode;
+  const isTenantBrandLoading = Boolean(staffTenantCode && !staffBrand);
+
+  if (pathname === "/staff") return null;
 
   return (
     <nav
-      className={`sticky top-0 z-50 border-b ${
+      className={`${isTenantBrandLoading ? "invisible" : ""} sticky top-0 z-50 border-b ${
         tenantBrand
           ? "border-theme-text/10 bg-theme-surface text-theme-text"
           : isPublicNav

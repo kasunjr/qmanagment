@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import WalkInTicketForm from "@/components/WalkInTicketForm";
 import { DEFAULT_APP_THEME, themeStyle, type AppTheme } from "@/lib/theme-style";
-import { AlertTriangle, CheckCircle, Clock3, Play, UserCheck } from "lucide-react";
+import { AlertTriangle, AtSign, CheckCircle, ClipboardList, Clock3, LogOut, MapPin, Play, UserCheck } from "lucide-react";
 
 // This staff member's counter. Waiting tickets are shared with other counters in the branch
 // that serve the same services; serving and completed tickets are this counter's own.
@@ -29,19 +30,29 @@ interface CounterResponse {
   error?: string;
 }
 
+interface StaffSession {
+  name: string;
+  username: string;
+  tenant_code: string;
+}
+
 function formatWaitTime(createdAt: string): string {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60_000));
   return minutes < 1 ? "<1 min" : `${minutes} min`;
 }
 
 export default function StaffPage() {
+  const router = useRouter();
   const [counter, setCounter] = useState<Counter | null>(null);
+  const [staffUser, setStaffUser] = useState<StaffSession | null>(null);
   const [tickets, setTickets] = useState<QueueTicket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [isCallingNext, setIsCallingNext] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [callError, setCallError] = useState("");
+  const [signOutError, setSignOutError] = useState("");
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [theme, setTheme] = useState<AppTheme | null>(null);
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
   const servingTicket = tickets.find((ticket) => ticket.status === "serving");
@@ -55,11 +66,31 @@ export default function StaffPage() {
     fetch("/api/staff/theme", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const result = (await response.json().catch(() => null)) as { theme?: AppTheme } | null;
-        setTheme(response.ok && result?.theme ? result.theme : DEFAULT_APP_THEME);
+        const loadedTheme = response.ok && result?.theme ? result.theme : DEFAULT_APP_THEME;
+        if (!controller.signal.aborted) {
+          document.body.style.backgroundColor = loadedTheme.background_color;
+          document.body.style.color = loadedTheme.text_color;
+          setTheme(loadedTheme);
+        }
       })
       .catch(() => {
-        if (!controller.signal.aborted) setTheme(DEFAULT_APP_THEME);
+        if (!controller.signal.aborted) {
+          document.body.style.backgroundColor = DEFAULT_APP_THEME.background_color;
+          document.body.style.color = DEFAULT_APP_THEME.text_color;
+          setTheme(DEFAULT_APP_THEME);
+        }
       });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/staff-auth/me", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const result = (await response.json().catch(() => null)) as { staffUser?: StaffSession } | null;
+        if (!controller.signal.aborted && response.ok && result?.staffUser) setStaffUser(result.staffUser);
+      })
+      .catch(() => {});
     return () => controller.abort();
   }, []);
 
@@ -165,37 +196,83 @@ export default function StaffPage() {
     }
   };
 
+  const signOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    setSignOutError("");
+    try {
+      const response = await fetch("/api/staff-auth/logout", { method: "POST" });
+      const result = (await response.json().catch(() => null)) as { tenantCode?: string } | null;
+      if (!response.ok) throw new Error("Unable to sign out.");
+      const tenantCode = result?.tenantCode ?? staffUser?.tenant_code;
+      router.replace(tenantCode && /^[A-F0-9]{7}$/i.test(tenantCode) ? `/staff/${tenantCode}` : "/");
+      router.refresh();
+    } catch (signOutError) {
+      setSignOutError(signOutError instanceof Error ? signOutError.message : "Unable to sign out.");
+      setIsSigningOut(false);
+    }
+  };
+
   if (!theme) {
-    return <p className="py-10 text-center text-sm text-slate-500" role="status">Loading staff counter...</p>;
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center" style={{ backgroundColor: DEFAULT_APP_THEME.background_color }} role="status" aria-label="Loading staff counter">
+        <span aria-hidden="true" className="h-8 w-8 animate-spin rounded-full border-4 motion-reduce:animate-none" style={{ borderColor: `${DEFAULT_APP_THEME.primary_color}33`, borderTopColor: DEFAULT_APP_THEME.primary_color }} />
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6 text-theme-text" style={themeStyle(theme)}>
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-theme-text/10 pb-5">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-theme bg-theme-primary/10">
-            <UserCheck className="h-6 w-6 text-theme-primary" />
-          </div>
+          {theme.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img alt="" className="h-11 w-11 shrink-0 rounded-theme object-contain" src={theme.logo_url} />
+          ) : (
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-theme bg-theme-primary/10">
+              <UserCheck className="h-6 w-6 text-theme-primary" />
+            </div>
+          )}
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-bold">Staff counter</h1>
-            <p className="truncate text-sm text-theme-text/60">{counter ? counterLabel : "Your counter"}</p>
-            {counter && (
-              <p className="truncate text-xs text-theme-text/50">
-                Serves: {counter.services.map((service) => service.name).join(", ") || "No services"}
-              </p>
-            )}
+            <p className="truncate text-xs font-semibold uppercase tracking-wide text-theme-text/55">{theme.app_name}</p>
+            <h1 className="truncate text-xl font-bold sm:text-2xl">{counter?.name ? counter.name : "Your counter"}</h1>
           </div>
         </div>
-        {hasServices && (
-          <div className="flex items-center gap-2 rounded-full border border-theme-text/20 bg-theme-surface px-3 py-1.5 text-sm font-semibold">
-            <span className="h-2 w-2 rounded-full bg-amber-400" />
-            {waitingTickets.length} waiting
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {hasServices && (
+            <div className="flex items-center gap-2 rounded-theme border border-theme-text/15 bg-theme-surface px-3 py-2 text-sm font-semibold">
+              <Clock3 className="h-4 w-4 text-theme-secondary" />
+              {waitingTickets.length} waiting
+            </div>
+          )}
+          <button
+            className="flex min-h-10 items-center justify-center gap-2 rounded-theme border border-theme-text/20 bg-theme-surface px-3 py-2 text-sm font-semibold text-theme-text transition hover:bg-theme-text/5 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isSigningOut}
+            onClick={() => void signOut()}
+            type="button"
+          >
+            <LogOut aria-hidden="true" className="h-4 w-4" />
+            {isSigningOut ? "Signing out..." : "Sign out"}
+          </button>
+        </div>
       </header>
 
-      {error && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      {callError && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">{callError}</p>}
+      <section aria-label="Staff account and assignments" className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-theme border border-theme-text/10 bg-theme-surface px-3 py-2.5 text-xs sm:px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <MapPin aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-theme-primary" />
+          <span className="text-theme-text/60">Branch</span>
+          <span className="truncate font-medium">{counter?.branch_name ?? "Not assigned"}</span>
+        </div>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <ClipboardList aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-theme-primary" />
+          <span className="shrink-0 text-theme-text/60">Services</span>
+          <span className="truncate font-medium">{counter?.services.map((service) => service.name).join(", ") || "None assigned"}</span>
+        </div>
+      </section>
+
+      {signOutError && <p className="rounded-theme border border-theme-secondary/30 bg-theme-secondary/10 p-3 text-sm" role="alert">{signOutError}</p>}
+      {error && <p className="rounded-theme border border-theme-secondary/30 bg-theme-secondary/10 p-3 text-sm" role="alert">{error}</p>}
+      {callError && <p className="rounded-theme border border-theme-secondary/30 bg-theme-secondary/10 p-3 text-sm" role="alert">{callError}</p>}
       {hasServices && dailyLimitReached && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800" role="status">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
