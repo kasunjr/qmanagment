@@ -26,7 +26,12 @@ import {
   Clock,
   Ticket,
   UserRound,
-  Power,
+  AtSign,
+  Mail,
+  MapPin,
+  Monitor,
+  ClipboardList,
+  Search,
 } from "lucide-react";
 
 const adminFont = Outfit({ subsets: ["latin"], display: "swap", variable: "--font-admin" });
@@ -300,12 +305,14 @@ function AdminDashboard() {
   >("branches");
 
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchSearch, setBranchSearch] = useState("");
   const [isBranchesLoading, setIsBranchesLoading] = useState(false);
   const [isSavingBranch, setIsSavingBranch] = useState(false);
   const [branchError, setBranchError] = useState("");
   const [branchForm, setBranchForm] = useState({ name: "", code: "" });
 
   const [services, setServices] = useState<Service[]>([]);
+  const [serviceSearch, setServiceSearch] = useState("");
   const [isServicesLoading, setIsServicesLoading] = useState(false);
   const [isSavingService, setIsSavingService] = useState(false);
   const [serviceError, setServiceError] = useState("");
@@ -314,6 +321,10 @@ function AdminDashboard() {
   const [serviceEdit, setServiceEdit] = useState({ name: "", description: "", duration: "" });
 
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [staffSearch, setStaffSearch] = useState("");
+  const [staffBranchFilter, setStaffBranchFilter] = useState("");
+  const [staffServiceFilter, setStaffServiceFilter] = useState("");
+  const [staffStatusFilter, setStaffStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState("");
@@ -803,6 +814,40 @@ function AdminDashboard() {
     }
   };
 
+  const normalizeFilter = (value: string) => value.trim().toLowerCase();
+  const branchQuery = normalizeFilter(branchSearch);
+  const filteredBranches = branches.filter((branch) =>
+    `${branch.name} ${branch.code}`.toLowerCase().includes(branchQuery),
+  );
+  const serviceQuery = normalizeFilter(serviceSearch);
+  const filteredServices = services.filter((service) =>
+    `${service.name} ${service.description}`.toLowerCase().includes(serviceQuery),
+  );
+  const staffQuery = normalizeFilter(staffSearch);
+  const filteredStaff = staff.filter((staffUser) => {
+    if (staffBranchFilter === "unassigned" && staffUser.branch_id !== null) return false;
+    if (staffBranchFilter && staffBranchFilter !== "unassigned" && staffUser.branch_id !== staffBranchFilter) return false;
+    if (staffServiceFilter === "unassigned" && staffUser.service_ids.length > 0) return false;
+    if (staffServiceFilter && staffServiceFilter !== "unassigned" && !staffUser.service_ids.includes(staffServiceFilter)) return false;
+    if (staffStatusFilter === "enabled" && !staffUser.is_enabled) return false;
+    if (staffStatusFilter === "disabled" && staffUser.is_enabled) return false;
+
+    const branchName = branches.find((branch) => branch.id === staffUser.branch_id)?.name ?? "";
+    const serviceNames = services
+      .filter((service) => staffUser.service_ids.includes(service.id))
+      .map((service) => service.name)
+      .join(" ");
+    const searchableText = [
+      staffUser.name,
+      staffUser.username,
+      staffUser.email,
+      staffUser.counter_name ?? "",
+      branchName,
+      serviceNames,
+    ].join(" ").toLowerCase();
+    return searchableText.includes(staffQuery);
+  });
+
   return (
     <div className={`${styles.page} ${adminFont.variable}`}>
       <div className={styles.dashboardHeader}>
@@ -993,13 +1038,30 @@ function AdminDashboard() {
                   </p>
                 )}
 
+                <div className={styles.listToolbar}>
+                  <label className={styles.listSearch}>
+                    <Search aria-hidden="true" />
+                    <span className="sr-only">Search branches</span>
+                    <input
+                      type="search"
+                      placeholder="Search by branch name or code"
+                      value={branchSearch}
+                      onChange={(event) => setBranchSearch(event.target.value)}
+                    />
+                  </label>
+                  <p className={styles.filterCount}>{filteredBranches.length} of {branches.length} branches</p>
+                </div>
+
                 <ul className="divide-y border rounded-lg">
                   {!isBranchesLoading && branches.length === 0 && (
                     <li className="p-4 text-sm text-slate-500">
                       No branches yet.
                     </li>
                   )}
-                  {branches.map((item) => (
+                  {!isBranchesLoading && branches.length > 0 && filteredBranches.length === 0 && (
+                    <li className="p-4 text-sm text-slate-500">No branches match this search.</li>
+                  )}
+                  {filteredBranches.map((item) => (
                     <li
                       key={item.id}
                       className="p-4 flex items-center justify-between hover:bg-slate-50"
@@ -1170,13 +1232,30 @@ function AdminDashboard() {
                   </p>
                 )}
 
+                <div className={styles.listToolbar}>
+                  <label className={styles.listSearch}>
+                    <Search aria-hidden="true" />
+                    <span className="sr-only">Search services</span>
+                    <input
+                      type="search"
+                      placeholder="Search by service name or description"
+                      value={serviceSearch}
+                      onChange={(event) => setServiceSearch(event.target.value)}
+                    />
+                  </label>
+                  <p className={styles.filterCount}>{filteredServices.length} of {services.length} services</p>
+                </div>
+
                 <ul className="divide-y border rounded-lg">
                   {!isServicesLoading && services.length === 0 && (
                     <li className="p-4 text-sm text-slate-500">
                       No services yet.
                     </li>
                   )}
-                  {services.map((item) => (
+                  {!isServicesLoading && services.length > 0 && filteredServices.length === 0 && (
+                    <li className="p-4 text-sm text-slate-500">No services match this search.</li>
+                  )}
+                  {filteredServices.map((item) => (
                     <li
                       key={item.id}
                       className="p-4 flex items-center justify-between hover:bg-slate-50"
@@ -1330,48 +1409,113 @@ function AdminDashboard() {
                   </p>
                 )}
 
-                <ul className="divide-y border rounded-lg">
+                <div className={styles.listToolbar}>
+                  <label className={styles.listSearch}>
+                    <Search aria-hidden="true" />
+                    <span className="sr-only">Search staff users</span>
+                    <input
+                      type="search"
+                      placeholder="Search staff users"
+                      value={staffSearch}
+                      onChange={(event) => setStaffSearch(event.target.value)}
+                    />
+                  </label>
+                  <select
+                    aria-label="Filter staff by branch"
+                    className={styles.filterSelect}
+                    value={staffBranchFilter}
+                    onChange={(event) => setStaffBranchFilter(event.target.value)}
+                  >
+                    <option value="">All branches</option>
+                    <option value="unassigned">No branch assigned</option>
+                    {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                  </select>
+                  <select
+                    aria-label="Filter staff by service"
+                    className={styles.filterSelect}
+                    value={staffServiceFilter}
+                    onChange={(event) => setStaffServiceFilter(event.target.value)}
+                  >
+                    <option value="">All services</option>
+                    <option value="unassigned">No services assigned</option>
+                    {services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
+                  </select>
+                  <select
+                    aria-label="Filter staff by status"
+                    className={styles.filterSelect}
+                    value={staffStatusFilter}
+                    onChange={(event) => setStaffStatusFilter(event.target.value as typeof staffStatusFilter)}
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="enabled">Enabled</option>
+                    <option value="disabled">Disabled</option>
+                  </select>
+                  <p className={styles.filterCount}>{filteredStaff.length} of {staff.length} staff users</p>
+                </div>
+
+                <ul className="border rounded-lg">
                   {!isStaffLoading && staff.length === 0 && (
                     <li className="p-4 text-sm text-slate-500">
                       No staff users yet.
                     </li>
                   )}
-                  {staff.map((item) => (
+                  {!isStaffLoading && staff.length > 0 && filteredStaff.length === 0 && (
+                    <li className="p-4 text-sm text-slate-500">No staff users match these filters.</li>
+                  )}
+                  {filteredStaff.map((item) => (
                     <li
                       key={item.id}
-                      className="p-4 flex items-center justify-between hover:bg-slate-50"
+                      className={styles.staffListItem}
                     >
-                      <div>
-                        <p className="font-semibold text-slate-800">
+                      <div className={styles.staffInfo}>
+                        <div className={styles.staffHeading}>
+                          <p className={styles.staffName}>
                           {item.name}
-                          <span className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${item.is_enabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                          </p>
+                          <span className={`${styles.staffStatus} ${item.is_enabled ? styles.staffEnabled : styles.staffDisabled}`}>
                             {item.is_enabled ? "Enabled" : "Disabled"}
                           </span>
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          @{item.username} | {item.email}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {branches.find((branch) => branch.id === item.branch_id)?.name ?? "No branch"}
-                          {" · "}
-                          {item.counter_name ?? "No counter name"}
-                          {" · "}
-                          {services
-                            .filter((service) => item.service_ids.includes(service.id))
-                            .map((service) => service.name)
-                            .join(", ") || "No services"}
-                        </p>
+                        </div>
+                        <dl className={styles.staffDetails}>
+                          <div className={styles.staffDetail}>
+                            <dt><AtSign aria-hidden="true" className={styles.staffDetailIcon} />Username</dt>
+                            <dd>@{item.username}</dd>
+                          </div>
+                          <div className={styles.staffDetail}>
+                            <dt><Mail aria-hidden="true" className={styles.staffDetailIcon} />Email</dt>
+                            <dd>{item.email}</dd>
+                          </div>
+                          <div className={styles.staffDetail}>
+                            <dt><MapPin aria-hidden="true" className={styles.staffDetailIcon} />Branch</dt>
+                            <dd>{branches.find((branch) => branch.id === item.branch_id)?.name ?? "No branch assigned"}</dd>
+                          </div>
+                          <div className={styles.staffDetail}>
+                            <dt><Monitor aria-hidden="true" className={styles.staffDetailIcon} />Counter Display Name</dt>
+                            <dd>{item.counter_name ?? "No counter name"}</dd>
+                          </div>
+                          <div className={`${styles.staffDetail} ${styles.staffServices}`}>
+                            <dt><ClipboardList aria-hidden="true" className={styles.staffDetailIcon} />Services</dt>
+                            <dd>
+                              {services.some((service) => item.service_ids.includes(service.id)) ? (
+                                <ul className={styles.staffServiceList}>
+                                  {services
+                                    .filter((service) => item.service_ids.includes(service.id))
+                                    .map((service) => <li key={service.id}>{service.name}</li>)}
+                                </ul>
+                              ) : "No services assigned"}
+                            </dd>
+                          </div>
+                        </dl>
                       </div>
-                      <div className="flex gap-2">
+                      <div className={styles.staffActions}>
                         <button
                           type="button"
                           aria-label={`${item.is_enabled ? "Disable" : "Enable"} ${item.name}`}
-                          title={`${item.is_enabled ? "Disable" : "Enable"} staff user`}
                           disabled={updatingStaffStatusId !== null}
                           onClick={() => void toggleStaffUser(item)}
-                          className={`p-1 rounded disabled:cursor-not-allowed disabled:opacity-50 ${item.is_enabled ? "text-amber-700 hover:bg-amber-50" : "text-emerald-700 hover:bg-emerald-50"}`}
+                          className={`whitespace-nowrap rounded border px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${item.is_enabled ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100" : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"}`}
                         >
-                          <Power className="w-4 h-4" />
+                          {item.is_enabled ? "Disable" : "Enable"}
                         </button>
                         <button
                           aria-label={`Edit ${item.name}`}
