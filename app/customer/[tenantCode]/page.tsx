@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Ticket, Clock, CheckCircle2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowDown, ArrowRight, ArrowUp, Building2, Check, CheckCircle2, ChevronDown, Clock, Search, Ticket, UserRound } from "lucide-react";
 import {
   DEFAULT_APP_THEME,
   themeStyle,
@@ -35,6 +35,173 @@ interface QueueTicket {
 const DAILY_LIMIT_MESSAGE =
   "No more tickets are available today. Please try again tomorrow.";
 
+interface DropdownOption {
+  value: string;
+  label: string;
+}
+
+function ThemeDropdown({
+  id,
+  label,
+  value,
+  options,
+  placeholder,
+  disabled = false,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: DropdownOption[];
+  placeholder: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const hasEnoughOptionsToFilter = options.length > 3;
+  const selectedOption = options.find((option) => option.value === value);
+  const filteredOptions = options.filter((option) =>
+    option.label.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setIsOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSearch("");
+      requestAnimationFrame(() => {
+        if (hasEnoughOptionsToFilter) searchRef.current?.focus();
+        else optionRefs.current[0]?.focus();
+      });
+    }
+  }, [hasEnoughOptionsToFilter, isOpen]);
+
+  const selectOption = (option: DropdownOption) => {
+    onChange(option.value);
+    setIsOpen(false);
+    setSearch("");
+  };
+
+  return (
+    <div className="min-w-0">
+      <label className="mb-1.5 block text-sm font-semibold text-theme-text/80" htmlFor={id}>
+        {label}
+      </label>
+      <div className="relative" ref={rootRef}>
+        <button
+          id={id}
+          ref={triggerRef}
+          aria-controls={`${id}-options`}
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          aria-label={label}
+          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-theme border border-theme-text/20 bg-theme-surface px-3 py-2.5 text-left text-sm text-theme-text shadow-sm transition hover:border-theme-primary/50 focus:border-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary/25 disabled:cursor-not-allowed disabled:opacity-55"
+          disabled={disabled}
+          onClick={() => setIsOpen((open) => !open)}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setIsOpen(true);
+            }
+          }}
+          type="button"
+        >
+          <span className={selectedOption ? "truncate" : "truncate text-theme-text/45"}>
+            {selectedOption?.label ?? placeholder}
+          </span>
+          <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 text-theme-text/60 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        </button>
+
+        {isOpen && (
+          <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-theme-lg border border-theme-text/15 bg-theme-surface shadow-xl">
+            {hasEnoughOptionsToFilter && (
+              <div className="border-b border-theme-text/10 p-2">
+                <div className="relative">
+                  <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-text/45" />
+                  <input
+                    ref={searchRef}
+                    aria-label={`Filter ${label.toLowerCase()} options`}
+                    className="w-full rounded-theme border border-theme-text/15 bg-theme-bg py-2 pl-9 pr-3 text-sm text-theme-text placeholder:text-theme-text/40 focus:border-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary/20"
+                    onChange={(event) => setSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowDown" && filteredOptions.length) {
+                        event.preventDefault();
+                        optionRefs.current[0]?.focus();
+                      }
+                      if (event.key === "Enter" && filteredOptions.length) {
+                        event.preventDefault();
+                        selectOption(filteredOptions[0]);
+                      }
+                    }}
+                    placeholder={`Search ${label.toLowerCase()}`}
+                    type="search"
+                    value={search}
+                  />
+                </div>
+              </div>
+            )}
+            <ul id={`${id}-options`} aria-label={`${label} options`} className="max-h-56 overflow-y-auto p-1" role="listbox">
+              {filteredOptions.length ? filteredOptions.map((option, index) => (
+                <li key={option.value} role="presentation">
+                  <button
+                    ref={(element) => { optionRefs.current[index] = element; }}
+                    aria-selected={value === option.value}
+                    className={`flex min-h-10 w-full items-center justify-between gap-3 rounded-theme px-3 py-2 text-left text-sm transition ${value === option.value ? "bg-theme-primary text-theme-on-primary" : "text-theme-text hover:bg-theme-primary/10"}`}
+                    onClick={() => selectOption(option)}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        optionRefs.current[(index + 1) % filteredOptions.length]?.focus();
+                      }
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        if (index === 0) {
+                          if (hasEnoughOptionsToFilter) searchRef.current?.focus();
+                          else triggerRef.current?.focus();
+                        }
+                        else optionRefs.current[index - 1]?.focus();
+                      }
+                    }}
+                    role="option"
+                    type="button"
+                  >
+                    <span className="truncate">{option.label}</span>
+                    {value === option.value && <Check aria-hidden="true" className="h-4 w-4 shrink-0" />}
+                  </button>
+                </li>
+              )) : (
+                <li className="px-3 py-4 text-center text-sm text-theme-text/55">No matches found.</li>
+              )}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function CustomerPage({
   params,
 }: {
@@ -42,6 +209,7 @@ export default function CustomerPage({
 }) {
   const tenantCode = params.tenantCode.toUpperCase();
   const [theme, setTheme] = useState<AppTheme>(DEFAULT_APP_THEME);
+  const [isThemeLoading, setIsThemeLoading] = useState(true);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -65,20 +233,34 @@ export default function CustomerPage({
         const result = (await response.json().catch(() => null)) as {
           theme?: AppTheme;
         } | null;
-        if (response.ok && result?.theme) setTheme(result.theme);
+        const loadedTheme = response.ok && result?.theme ? result.theme : DEFAULT_APP_THEME;
+        if (!controller.signal.aborted) {
+          document.body.style.backgroundColor = loadedTheme.background_color;
+          document.body.style.color = loadedTheme.text_color;
+          setTheme(loadedTheme);
+          setIsThemeLoading(false);
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          document.body.style.backgroundColor = DEFAULT_APP_THEME.background_color;
+          document.body.style.color = DEFAULT_APP_THEME.text_color;
+          setTheme(DEFAULT_APP_THEME);
+          setIsThemeLoading(false);
+        }
+      });
     return () => controller.abort();
   }, [tenantCode]);
 
   useEffect(() => {
+    if (isThemeLoading) return;
     document.body.style.backgroundColor = theme.background_color;
     document.body.style.color = theme.text_color;
     return () => {
       document.body.style.backgroundColor = "";
       document.body.style.color = "";
     };
-  }, [theme]);
+  }, [isThemeLoading, theme]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -274,57 +456,96 @@ export default function CustomerPage({
     setBookError("");
   };
 
-  return (
-    <div
-      className="mx-auto max-w-lg rounded-theme-lg border border-theme-text/10 bg-theme-surface p-6 shadow-sm"
-      style={themeStyle(theme)}
-    >
-      <div className="mb-6 flex items-center gap-3 border-b border-theme-text/10 pb-4">
-        {theme.logo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            alt=""
-            className="h-9 w-9 shrink-0 rounded-theme object-contain"
-            src={theme.logo_url}
-          />
-        ) : (
-          <Ticket className="h-8 w-8 shrink-0 text-theme-primary" />
-        )}
-        <div>
-          <h1 className="text-2xl font-bold text-theme-text">
-            Customer Queue Portal
-          </h1>
-          <p className="text-sm text-theme-text/60">
-            Get a digital queue ticket instantly
-          </p>
-        </div>
+  if (isThemeLoading) {
+    return (
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center"
+        style={{ backgroundColor: DEFAULT_APP_THEME.background_color }}
+        role="status"
+        aria-label="Loading customer portal"
+      >
+        <span
+          aria-hidden="true"
+          className="h-8 w-8 animate-spin rounded-full border-4 motion-reduce:animate-none"
+          style={{ borderColor: `${DEFAULT_APP_THEME.primary_color}33`, borderTopColor: DEFAULT_APP_THEME.primary_color }}
+        />
       </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-3xl py-3 sm:py-5">
+      <section
+        aria-labelledby="customer-portal-title"
+        className="grid grid-cols-[5px_minmax(0,1fr)_3px] overflow-visible rounded-theme-lg border border-theme-text/10 bg-theme-surface shadow-xl"
+        style={themeStyle(theme)}
+      >
+        <div aria-hidden="true" className="bg-theme-primary" />
+
+        <div className="min-w-0 p-4 sm:p-6 md:p-8">
+          <div className="w-full">
+            <header className="mb-5 border-b border-theme-text/10 pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  {theme.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img alt="" className="h-11 w-11 shrink-0 rounded-theme object-contain" src={theme.logo_url} />
+                  ) : (
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-theme bg-theme-primary/10 text-theme-primary">
+                      <UserRound aria-hidden="true" className="h-5 w-5" />
+                    </span>
+                  )}
+                  <span className="min-w-0 truncate text-xl font-bold text-theme-text sm:text-2xl">{theme.app_name}</span>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-4">
+                <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-theme-secondary">Customer portal</p>
+                <h1 className="mt-1.5 text-2xl font-bold text-theme-text sm:text-3xl" id="customer-portal-title">
+                  {ticket ? "Your ticket" : "Get a queue ticket"}
+                </h1>
+                <p className="mt-1.5 text-sm text-theme-text/60">
+                  {ticket ? "Keep this ticket number for your visit." : "Choose your branch and service to join the waiting list."}
+                </p>
+                </div>
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-theme bg-theme-primary/10 text-theme-primary sm:h-12 sm:w-12">
+                  <Ticket aria-hidden="true" className="h-5 w-5 sm:h-6 sm:w-6" />
+                </span>
+              </div>
+            </header>
 
       {isLoading ? (
-        <p className="text-sm text-theme-text/60">Loading booking options...</p>
+        <div className="flex items-center gap-3 py-8 text-sm text-theme-text/60" role="status">
+          <span aria-hidden="true" className="h-5 w-5 animate-spin rounded-full border-2 border-theme-primary/20 border-t-theme-primary motion-reduce:animate-none" />
+          Loading booking options...
+        </div>
       ) : loadError ? (
-        <p className="text-sm text-red-500" role="alert">
+        <p className="rounded-theme border border-theme-secondary/25 bg-theme-secondary/10 p-4 text-sm text-theme-text" role="alert">
           {loadError}
         </p>
       ) : branches.length === 0 || services.length === 0 ? (
-        <p className="text-sm text-slate-500">Booking is not available yet.</p>
+        <div className="flex items-center gap-3 rounded-theme border border-theme-text/10 bg-theme-bg p-4 text-sm text-theme-text/70">
+          <Ticket aria-hidden="true" className="h-5 w-5 shrink-0 text-theme-primary" />
+          Booking is not available yet.
+        </div>
       ) : !ticket && !acceptingTickets ? (
         <div
-          className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-center"
+          className="rounded-theme border border-theme-secondary/25 bg-theme-secondary/10 p-4 text-center text-theme-text"
           role="status"
         >
-          <Clock className="w-6 h-6 text-amber-600 mx-auto mb-2" />
-          <p className="text-sm font-medium text-amber-800">
+          <Clock className="mx-auto mb-2 h-6 w-6 text-theme-secondary" />
+          <p className="text-sm font-medium">
             {DAILY_LIMIT_MESSAGE}
           </p>
         </div>
       ) : !ticket ? (
         <form onSubmit={handleBook} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-theme-text/80">
-              Your Full Name
+            <label className="mb-1.5 block text-sm font-semibold text-theme-text/80" htmlFor="customer-name">
+              Your name
             </label>
             <input
+              id="customer-name"
               type="text"
               required
               value={name}
@@ -334,57 +555,38 @@ export default function CustomerPage({
             />
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-theme-text/80">
-              Select Branch
-            </label>
-            <select
-              required
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ThemeDropdown
+              id="customer-branch"
+              label="Branch"
               value={branchId}
-              onChange={(e) => {
-                setBranchId(e.target.value);
+              options={branches.map((branch) => ({ value: branch.id, label: branch.name }))}
+              placeholder="Select a branch"
+              onChange={(value) => {
+                setBranchId(value);
                 setServiceId("");
               }}
-              className="w-full rounded-theme border border-theme-text/20 bg-theme-surface p-2.5 text-sm text-theme-text focus:border-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary/30"
-            >
-              <option value="">Select a branch</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-theme-text/80">
-              Select Service
-            </label>
-            <select
-              required
-              disabled={!branchId}
-              value={serviceId}
-              onChange={(e) => setServiceId(e.target.value)}
-              className="w-full rounded-theme border border-theme-text/20 bg-theme-surface p-2.5 text-sm text-theme-text focus:border-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <option value="">
-                {branchId ? "Select a service" : "Select a branch first"}
-              </option>
-              {branchServices.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            />
+            <div className="min-w-0">
+              <ThemeDropdown
+                id="customer-service"
+                label="Service"
+                value={serviceId}
+                options={branchServices.map((service) => ({ value: service.id, label: service.name }))}
+                placeholder={branchId ? "Select a service" : "Select a branch first"}
+                disabled={!branchId}
+                onChange={setServiceId}
+              />
             {selectedService?.description && (
               <p className="mt-2 whitespace-pre-line text-sm text-theme-text/70">
                 {selectedService.description}
               </p>
             )}
           </div>
+          </div>
 
           {bookError && (
-            <p className="text-sm text-red-500" role="alert">
+            <p className="rounded-theme border border-theme-secondary/25 bg-theme-secondary/10 p-3 text-sm text-theme-text" role="alert">
               {bookError}
             </p>
           )}
@@ -392,34 +594,45 @@ export default function CustomerPage({
           <button
             type="submit"
             disabled={isBooking}
-            className="w-full rounded-theme bg-theme-primary py-3 font-semibold text-theme-on-primary transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-theme bg-theme-primary px-4 py-3 font-semibold text-theme-on-primary transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isBooking ? "Getting ticket..." : "Get Queue Ticket"}
+            {!isBooking && <ArrowRight aria-hidden="true" className="h-4 w-4" />}
           </button>
         </form>
       ) : (
-        <div className="text-center space-y-6">
-          <div className="rounded-theme-lg border border-theme-primary/25 bg-theme-primary/10 p-6">
-            <span className="text-xs font-bold uppercase tracking-widest text-theme-primary">
-              Your Ticket Number
-            </span>
-            <div className="my-2 text-5xl font-extrabold text-theme-primary">
-              A {String(ticket.ticket_number).padStart(3, "0")}
+        <div className="space-y-4">
+          <section aria-label="Your queue ticket" className="overflow-hidden rounded-theme-lg border border-theme-primary/20 bg-theme-bg">
+            <div className="flex items-center justify-between gap-4 bg-theme-primary/10 p-4 sm:p-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-theme-primary">Your ticket number</p>
+                <p className="mt-1 text-5xl font-extrabold leading-none text-theme-primary sm:text-6xl">
+                  A {String(ticket.ticket_number).padStart(3, "0")}
+                </p>
+              </div>
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-theme bg-theme-surface text-theme-primary">
+                <Ticket aria-hidden="true" className="h-6 w-6" />
+              </span>
             </div>
-            <p className="text-sm font-medium text-theme-text">
-              Name: {ticket.customer_name}
-            </p>
-            <p className="text-sm font-medium text-theme-text">
-              Branch: {ticket.branch_name}
-            </p>
-            <p className="text-sm font-medium text-theme-text">
-              Service: {ticket.service_name}
-            </p>
-          </div>
+            <dl className="grid gap-x-5 gap-y-2 border-t border-theme-text/10 bg-theme-surface p-4 sm:grid-cols-2 sm:p-5">
+              <div>
+                <dt className="text-xs font-medium text-theme-text/55">Name</dt>
+                <dd className="mt-0.5 break-words text-sm font-semibold text-theme-text">{ticket.customer_name}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-theme-text/55">Branch</dt>
+                <dd className="mt-0.5 break-words text-sm font-semibold text-theme-text">{ticket.branch_name}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-medium text-theme-text/55">Service</dt>
+                <dd className="mt-0.5 break-words text-sm font-semibold text-theme-text">{ticket.service_name}</dd>
+              </div>
+            </dl>
+          </section>
 
           {ticket.status === "serving" && (
             <div
-              className="rounded-theme-lg bg-theme-secondary p-4 text-theme-on-secondary"
+              className="rounded-theme-lg bg-theme-secondary p-3 text-theme-on-secondary"
               role="status"
             >
               <p className="text-lg font-bold">
@@ -430,18 +643,18 @@ export default function CustomerPage({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-theme border border-theme-text/10 bg-theme-surface p-4 text-center">
-              <Clock className="mx-auto mb-1 h-5 w-5 text-theme-text/40" />
-              <div className="text-xs text-theme-text/60">People Ahead</div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-theme border border-theme-text/10 bg-theme-surface p-3 text-center">
+              <Clock aria-hidden="true" className="mx-auto mb-1 h-5 w-5 text-theme-primary/65" />
+              <div className="text-xs text-theme-text/60">People ahead</div>
               <div className="text-xl font-bold text-theme-text">
                 {ticket.people_ahead}
               </div>
             </div>
-            <div className="rounded-theme border border-theme-text/10 bg-theme-surface p-4 text-center">
-              <CheckCircle2 className="mx-auto mb-1 h-5 w-5 text-theme-secondary" />
+            <div className="rounded-theme border border-theme-text/10 bg-theme-surface p-3 text-center">
+              <CheckCircle2 aria-hidden="true" className="mx-auto mb-1 h-5 w-5 text-theme-secondary" />
               <div className="text-xs text-theme-text/60">Status</div>
-              <div className="text-sm font-bold capitalize text-theme-secondary">
+              <div className="text-sm font-bold capitalize text-theme-text">
                 {ticket.status}
               </div>
             </div>
@@ -450,13 +663,17 @@ export default function CustomerPage({
           {ticket.status === "completed" && (
             <button
               onClick={bookAnother}
-              className="text-xs text-theme-primary underline hover:opacity-80"
+              className="mx-auto flex min-h-11 items-center justify-center gap-2 rounded-theme bg-theme-primary px-4 py-2 text-sm font-semibold text-theme-on-primary hover:opacity-90"
             >
-              Book Another Ticket
+              Book another ticket <ArrowRight aria-hidden="true" className="h-4 w-4" />
             </button>
           )}
         </div>
       )}
+          </div>
+        </div>
+        <div aria-hidden="true" className="bg-theme-primary/20" />
+      </section>
     </div>
   );
 }

@@ -119,10 +119,10 @@ export default function Navbar() {
     })
       .then(async (response) => {
         const result = (await response.json().catch(() => null)) as { theme?: AppTheme } | null;
-        setCustomerBrand(response.ok && result?.theme ? result.theme : null);
+        if (!controller.signal.aborted) setCustomerBrand(response.ok && result?.theme ? result.theme : DEFAULT_APP_THEME);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setCustomerBrand(null);
+        if (!controller.signal.aborted) setCustomerBrand(DEFAULT_APP_THEME);
       });
     return () => controller.abort();
   }, [customerTenantCode]);
@@ -156,9 +156,9 @@ export default function Navbar() {
 
   const tenantBrand = isStaffRoute ? staffBrand : customerBrand;
   const isPublicNav = !isStaffRoute && !customerTenantCode;
-  const isTenantBrandLoading = Boolean(staffTenantCode && !staffBrand);
+  const isTenantBrandLoading = Boolean((staffTenantCode && !staffBrand) || (customerTenantCode && !customerBrand));
 
-  if (pathname === "/staff") return null;
+  if (pathname === "/staff" || customerTenantCode) return null;
 
   return (
     <nav
