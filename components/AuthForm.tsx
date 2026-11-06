@@ -1,10 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
+import { Outfit } from "next/font/google";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowRight, KeyRound } from "lucide-react";
+import { ArrowRight, CheckCircle2, Eye, EyeOff, KeyRound, Mail, Ticket, UserCheck } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
+import logo from "@/app/assets/logo.png";
+import styles from "./AuthForm.module.css";
+
+const authFont = Outfit({ subsets: ["latin"], display: "swap", variable: "--font-auth" });
 
 type AuthMode = "login" | "signup";
 
@@ -26,6 +32,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [isResending, setIsResending] = useState(false);
   const [isGoogleRedirecting, setIsGoogleRedirecting] = useState(false);
   const [isGoogleVerification, setIsGoogleVerification] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [notice, setNotice] = useState("");
   const isSignup = mode === "signup";
 
   useEffect(() => {
@@ -60,6 +68,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setNotice("");
     setIsSubmitting(true);
 
     try {
@@ -105,6 +114,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
   async function handleResendCode() {
     setError("");
+    setNotice("");
     setIsResending(true);
 
     try {
@@ -122,6 +132,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
       }
       setChallengeId(result.challengeId);
       setVerificationCode("");
+      setNotice("A new verification code has been sent.");
     } catch {
       setError("Unable to reach the server. Check your connection and try again.");
     } finally {
@@ -138,79 +149,81 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
   if (isLoading || user) {
     return (
-      <div className="flex justify-center py-16" role="status" aria-label="Checking your session">
-        <span aria-hidden="true" className="relative h-16 w-16">
-          <span className="absolute inset-0 animate-spin rounded-full border-4 border-emerald-400/20 border-t-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.18)] motion-reduce:animate-none" />
-          <span className="absolute inset-2 animate-[spin_1.5s_linear_infinite_reverse] rounded-full border-2 border-teal-300/20 border-b-teal-300 motion-reduce:animate-none" />
-          <span className="absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full bg-emerald-300 motion-reduce:animate-none" />
-        </span>
-        <span className="sr-only">Checking your session...</span>
-      </div>
+      <section className={`${styles.page} ${styles.loadingState} ${authFont.variable}`} role="status" aria-label="Checking your session">
+        <span className={styles.loadingGraphic} aria-hidden="true"><span /><KeyRound size={23} /></span>
+        <p>Checking your session...</p>
+      </section>
     );
   }
 
   return (
-    <section className="mx-auto grid min-h-[calc(100vh-10rem)] max-w-5xl items-center gap-10 py-10 md:grid-cols-[1fr_400px]">
-      <div className="hidden border-l-4 border-emerald-500 pl-7 md:block">
-        <p className="mb-3 text-sm font-semibold uppercase text-emerald-700">Queue Management System</p>
-        <h1 className="max-w-lg text-4xl font-bold leading-tight text-slate-900">
-          {isSignup ? "Create your workspace account." : "Your operations, in sequence."}
-        </h1>
-        <p className="mt-4 max-w-md text-base leading-7 text-slate-600">
-          Sign in to manage branches, services, counters, and queue operations.
-        </p>
+    <section className={`${styles.page} ${authFont.variable}`} aria-labelledby="auth-title">
+      <div className={styles.intro}>
+        <Link href="/" aria-label="MyTurn home" className={styles.brand}><Image src={logo} alt="MyTurn" sizes="180px" /></Link>
+        <p className={styles.eyebrow}>{isSignup ? "A SMALL START. A BETTER FLOW." : "A LITTLE LESS WAITING."}</p>
+        <h2>{isSignup ? <>Your next chapter.<br /><span>Start with one queue.</span></> : <>A clearer queue.<br /><span>A calmer day.</span></>}</h2>
+        <p>{isSignup ? "A small shop, a busy institute, or a growing team. Your first queue starts here." : "Your branches, services, and team, all connected. Pick up where you left off."}</p>
+        <div className={styles.authGraphic} aria-hidden="true">
+          <div className={styles.graphicRoute} />
+          <div className={styles.graphicTicket}><Ticket size={25} strokeWidth={1.6} /><span>YOUR NEXT TURN</span><strong>A-024</strong><div /><span>General queue</span></div>
+          <div className={styles.graphicKey}><KeyRound size={31} strokeWidth={1.5} /></div>
+          <div className={styles.graphicAccount}><UserCheck size={26} /><div><span>YOUR WORKSPACE</span><strong>Ready for your day.</strong></div><CheckCircle2 size={20} /></div>
+        </div>
+        <p className={styles.introFootnote}>{isSignup ? <>Start with the free Basic plan. <Link href="/pricing">Usage limits apply.</Link></> : <>Small setup. A smoother day.</>}</p>
       </div>
 
-      <div className="w-full border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
-        <div className="mb-7 flex h-11 w-11 items-center justify-center bg-emerald-50 text-emerald-700">
-          <KeyRound aria-hidden="true" className="h-5 w-5" />
+      <div className={styles.formPanel}>
+        <div className={styles.formIcon} aria-hidden="true">
+          {loginStep === "code" ? <Mail size={25} /> : isSignup ? <UserCheck size={25} /> : <KeyRound size={25} />}
         </div>
-        <h2 className="text-2xl font-bold text-slate-900">{isSignup ? "Create account" : "Sign in"}</h2>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className={styles.formEyebrow}>{loginStep === "code" ? "CHECK YOUR INBOX" : isSignup ? "LET'S GET YOU STARTED" : "WELCOME BACK"}</p>
+        <h1 id="auth-title">{loginStep === "code" ? "Verify your email" : isSignup ? "Create account" : "Sign in"}</h1>
+        <p className={styles.description}>
           {isSignup
             ? loginStep === "code"
               ? `Enter the 6-digit code sent to ${email} to verify your email.`
-              : "Use your email to create an account."
+              : "Start your free Basic workspace."
             : loginStep === "code" && verificationType === "signup"
               ? `Enter the 6-digit code sent to ${email} to verify your email.`
               : loginStep === "code"
               ? isGoogleVerification
                 ? "Enter the 6-digit code sent to your email to finish signing in."
                 : `Enter the 6-digit code sent to ${email} to finish signing in.`
-              : "Sign in to continue to the admin dashboard."}
+              : "Your workspace is ready when you are."}
         </p>
 
         {loginStep === "password" && (
           <>
             <button
-              className="mt-7 flex w-full items-center justify-center gap-3 border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+              className={styles.googleButton}
               disabled={isGoogleRedirecting || isSubmitting}
               onClick={startGoogleSignIn}
               type="button"
             >
-              <span aria-hidden="true" className="font-bold text-base text-blue-600">G</span>
+              <span aria-hidden="true" className={styles.googleMark}>G</span>
               {isGoogleRedirecting ? "Redirecting to Google..." : "Continue with Google"}
             </button>
-            <div className="mt-5 flex items-center gap-3 text-xs text-slate-400">
-              <span className="h-px flex-1 bg-slate-200" />
-              OR CONTINUE WITH EMAIL
-              <span className="h-px flex-1 bg-slate-200" />
-            </div>
+            <div className={styles.divider}>or continue with email</div>
           </>
         )}
 
-        <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
+        <form className={styles.form} onSubmit={handleSubmit} aria-busy={isSubmitting}>
           {loginStep === "code" ? (
             <div>
-              <label htmlFor="verification-code" className="mb-1.5 block text-sm font-medium text-slate-700">Email verification code</label>
+              <label htmlFor="verification-code">Email verification code</label>
               <input
+                autoFocus
                 autoComplete="one-time-code"
-                className="w-full border border-slate-300 px-3 py-2.5 text-sm tracking-[0.3em] outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                className={styles.codeInput}
                 id="verification-code"
+                name="verification-code"
+                aria-describedby={error ? "auth-error" : undefined}
+                disabled={isSubmitting || isResending}
                 inputMode="numeric"
                 maxLength={6}
                 onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                 pattern="[0-9]{6}"
+                placeholder="Enter 6-digit code"
                 required
                 type="text"
                 value={verificationCode}
@@ -219,39 +232,54 @@ export default function AuthForm({ mode }: AuthFormProps) {
           ) : (
             <>
               <div>
-                <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">Email address</label>
+                <label htmlFor="email">Email address</label>
+                <div className={styles.inputWrap}>
+                <Mail size={18} aria-hidden="true" />
                 <input
                   autoComplete="email"
-                  className="w-full border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                   id="email"
+                  name="email"
+                  aria-describedby={error ? "auth-error" : undefined}
+                  disabled={isSubmitting || isGoogleRedirecting}
                   onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
                   required
                   type="email"
                   value={email}
                 />
+                </div>
               </div>
               <div>
-                <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
+                <label htmlFor="password">Password</label>
+                <div className={styles.inputWrap}>
+                <KeyRound size={18} aria-hidden="true" />
                 <input
                   autoComplete={isSignup ? "new-password" : "current-password"}
-                  className="w-full border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                  className={styles.passwordInput}
                   id="password"
+                  name="password"
+                  aria-describedby={[isSignup && "password-hint", error && "auth-error"].filter(Boolean).join(" ") || undefined}
+                  disabled={isSubmitting || isGoogleRedirecting}
                   minLength={isSignup ? 12 : undefined}
                   onChange={(event) => setPassword(event.target.value)}
+                  placeholder={isSignup ? "At least 12 characters" : "Your password"}
                   required
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                 />
-                {isSignup && <p className="mt-1.5 text-xs text-slate-500">Use at least 12 characters.</p>}
+                <button type="button" className={styles.passwordToggle} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} title={showPassword ? "Hide password" : "Show password"} disabled={isSubmitting || isGoogleRedirecting} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff size={19} /> : <Eye size={19} />}</button>
+                </div>
+                {isSignup && <p className={styles.fieldHint} id="password-hint">Use at least 12 characters.</p>}
               </div>
             </>
           )}
 
-          {error && <p aria-live="polite" className="border-l-2 border-rose-600 bg-rose-50 px-3 py-2 text-sm text-rose-800">{error}</p>}
+          {error && <p id="auth-error" role="alert" className={styles.error}>{error}</p>}
+          {notice && <p role="status" className={styles.notice}>{notice}</p>}
 
           <button
-            className="flex w-full items-center justify-center gap-2 bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60"
-            disabled={isSubmitting || isResending}
+            className={styles.submitButton}
+            disabled={isSubmitting || isResending || isGoogleRedirecting}
             type="submit"
           >
             {isSubmitting
@@ -261,14 +289,14 @@ export default function AuthForm({ mode }: AuthFormProps) {
                 : !isSignup && loginStep === "code"
                 ? "Verify and sign in"
                 : isSignup ? "Create account" : "Continue"}
-            {!isSubmitting && <ArrowRight aria-hidden="true" className="h-4 w-4" />}
+            {!isSubmitting && <ArrowRight aria-hidden="true" size={18} />}
           </button>
         </form>
 
         {loginStep === "code" && (
-          <div className="mt-4 flex items-center justify-between text-sm">
+          <div className={styles.codeActions}>
             <button
-              className="font-semibold text-emerald-700 hover:text-emerald-800 disabled:opacity-60"
+              className={styles.resendButton}
               disabled={isResending || isSubmitting}
               onClick={() => void handleResendCode()}
               type="button"
@@ -277,9 +305,12 @@ export default function AuthForm({ mode }: AuthFormProps) {
             </button>
             {!isSignup && verificationType !== "signup" && (
               <button
-                className="text-slate-600 hover:text-slate-900"
+                className={styles.backButton}
+                disabled={isSubmitting || isResending}
                 onClick={() => {
                   setError("");
+                  setNotice("");
+                  setShowPassword(false);
                   setLoginStep("password");
                   setIsGoogleVerification(false);
                 }}
@@ -291,12 +322,13 @@ export default function AuthForm({ mode }: AuthFormProps) {
           </div>
         )}
 
-        <p className="mt-6 text-sm text-slate-600">
-          {isSignup ? "Already have an account? " : "New to Queue? "}
-          <Link className="font-semibold text-emerald-700 hover:text-emerald-800" href={isSignup ? "/login" : "/signup"}>
+        <p className={styles.switchMode}>
+          {isSignup ? "Already have an account? " : "New to MyTurn? "}
+          <Link href={isSignup ? "/login" : "/signup"}>
             {isSignup ? "Sign in" : "Create an account"}
           </Link>
         </p>
+        {isSignup && loginStep === "password" && <p className={styles.planNote}>Free Basic plan. <Link href="/pricing">See plans & usage limits <ArrowRight size={12} /></Link></p>}
       </div>
     </section>
   );

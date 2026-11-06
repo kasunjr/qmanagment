@@ -1,0 +1,75 @@
+.publicNav {
+  border-color: #b8cdbf;
+  background-color: #f2f8f3;
+  color: #243c32;
+  backdrop-filter: blur(12px);
+}
+
+.navLinks { min-width: 0; }
+.menuToggle { display: none; }
+
+.brand {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  border-radius: 8px;
+}
+
+.brandOnDark {
+  background-color: #f2f8f3;
+}
+
+.brandLogo {
+  display: block;
+  width: 160px;
+  height: auto;
+}
+
+.brand:focus-visible {
+  outline: 2px solid #087a3c;
+  outline-offset: 3px;
+}
+
+@media (max-width: 639px) {
+  .brandLogo {
+    width: 120px;
+  }
+  .publicNav .menuToggle { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #c9ddd0; border-radius: 12px; color: #243c32; background: #e8f4eb; }
+  .publicNav .menuToggle:hover { background: #dcefe1; }
+  .publicNav .navLinks { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 7px; padding: 14px 20px 20px; border-bottom: 1px solid #b8cdbf; background: #f2f8f3; box-shadow: 0 12px 20px #143d2610; }
+  .publicNav .navLinks.menuOpen { display: flex; }
+  .publicNav .navLinks > * { display: flex; align-items: center; width: 100%; min-height: 44px; margin-left: 0; padding: 11px 14px; font-size: 15px; }
+}
+
+.publicLink {
+  border-radius: 10px;
+  color: #365447;
+}
+
+.publicLink:hover {
+  background-color: #f0faf3;
+  color: #086538;
+}
+
+.activeLink {
+  border-radius: 10px;
+  background-color: #e3f6e8;
+  color: #086538;
+}
+
+.signIn {
+  border-radius: 10px;
+  background: linear-gradient(115deg, #17823a, #04633e);
+  color: #ffffff;
+  box-shadow: 0 3px 10px #13803a18;
+}
+
+.signIn:hover {
+  background: linear-gradient(115deg, #106d30, #034f32);
+}
+
+.publicNav a:focus-visible,
+.publicNav button:focus-visible {
+  outline: 2px solid #087a3c;
+  outline-offset: 3px;
+}
