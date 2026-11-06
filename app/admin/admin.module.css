@@ -28,7 +28,7 @@
 .qrCanvas { display: grid; place-items: center; width: 218px; height: 218px; max-width: 100%; padding: 18px; margin-bottom: 18px; border: 1px solid #d5e3d9; border-radius: 15px; background: #fff; box-shadow: 0 5px 16px #163c2608; }.qrCanvas svg { display: block; max-width: 100%; height: auto; }
 .configNav { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 22px; padding-bottom: 13px; border-bottom: 1px solid var(--line); }.configNav button { min-height: 39px; padding: 8px 14px; }
 .createForm { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .7fr) auto; align-items: end; gap: 12px; max-width: 760px; margin-bottom: 24px; }
-.field { display: flex; flex-direction: column; gap: 8px; min-width: 0; color: #365341; font-size: 13px; font-weight: 500; }.page .field input { width: 100%; min-width: 0; font-weight: 400; }.createForm > button { min-height: 40px; justify-content: center; }
+.field { display: flex; flex-direction: column; gap: 8px; min-width: 0; color: #365341; font-size: 13px; font-weight: 500; }.page .field input, .page .field textarea { width: 100%; min-width: 0; font-weight: 400; }.fieldWide { grid-column: 1 / -1; }.createForm > button { min-height: 40px; justify-content: center; }
 .staffDialog { max-height: calc(100dvh - 32px); overflow-y: auto; }.staffDialog > header { position: sticky; top: 0; z-index: 1; background: #fff; }
 .page input[readonly] { background: #f0f5f1; color: #6a7e70; }
 .page button[aria-label] { min-width: 30px; min-height: 30px; }
@@ -54,8 +54,8 @@
 .page :global(.text-emerald-900), .page :global(.text-emerald-800), .page :global(.text-emerald-700), .page :global(.text-emerald-600) { color: #17653a; }
 .page :global(.bg-amber-100) { background-color: #fff0d3; }.page :global(.text-amber-700) { color: #8e6323; }
 .page :global(.text-red-500), .page :global(.text-red-600) { color: #c33b3b; }.page :global(.text-green-600) { color: #087a3c; }
-.page input:not([type="color"]):not([type="checkbox"]):not([type="radio"]), .page select { color: #243c32; background: #fff; border-color: #c4d6ca; border-radius: 9px; min-height: 40px; font-family: inherit; }.page input::placeholder { color: #819087; }.page option { color: #243c32; background: #fff; }
-.page input:focus, .page select:focus { outline: none; border-color: #16834b; box-shadow: 0 0 0 3px #d9f3e1; }.page input[type="checkbox"], .page input[type="radio"] { accent-color: var(--green); }
+.page input:not([type="color"]):not([type="checkbox"]):not([type="radio"]), .page select, .page textarea { color: #243c32; background: #fff; border-color: #c4d6ca; border-radius: 9px; min-height: 40px; font-family: inherit; }.page input::placeholder, .page textarea::placeholder { color: #819087; }.page option { color: #243c32; background: #fff; }
+.page input:focus, .page select:focus, .page textarea:focus { outline: none; border-color: #16834b; box-shadow: 0 0 0 3px #d9f3e1; }.page input[type="checkbox"], .page input[type="radio"] { accent-color: var(--green); }
 .page :global(.rounded), .page :global(.rounded-md) { border-radius: 9px; }.page :global(.rounded-lg) { border-radius: 12px; }.page :global(.rounded-xl) { border-radius: 18px; }
 .page button:disabled { opacity: .6; }.page :global(.shadow-2xl) { box-shadow: 0 20px 60px #12301c25; }
 @media (max-width: 900px) { .usageList { gap: 12px; }.tabNav button { padding-inline: 12px; }.qrGrid { gap: 20px; }.qrSection { padding-inline: 18px; } }

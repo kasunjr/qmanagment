@@ -1102,7 +1102,7 @@ function AdminDashboard() {
                   >
                     <Plus className="w-4 h-4" /> Add
                   </button>
-                  <label className={styles.field}>
+                  <label className={`${styles.field} ${styles.fieldWide}`}>
                     Description (optional)
                   <textarea
                     aria-label="Service description"
@@ -1116,7 +1116,7 @@ function AdminDashboard() {
                         description: e.target.value,
                       })
                     }
-                    className="mt-2 p-2 text-sm border rounded w-full"
+                    className="p-2 text-sm border rounded w-full"
                   />
                   </label>
                 </form>
