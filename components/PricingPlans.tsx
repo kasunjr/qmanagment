@@ -8,6 +8,7 @@ import type { PlanRecord } from "@/lib/plans";
 import styles from "./PricingPlans.module.css";
 
 const FEATURED_PLAN_CODE = "pro";
+const DEFAULT_PLAN_CODE = "basic";
 
 function limitText(limit: number | null, singular: string, plural: string): string {
   if (limit === null) return `Unlimited ${plural}`;
@@ -63,6 +64,18 @@ export function PricingPlans({ plans }: { plans: PlanRecord[] }) {
   }, [user, accessToken]);
 
   const currentPlan = plans.find((plan) => plan.code === currentPlanCode);
+  const currentPlanIndex = plans.findIndex((plan) => plan.code === currentPlanCode);
+
+  function cardAction(plan: PlanRecord, index: number): { href: string; label: string } | null {
+    if (plan.code === currentPlanCode) return null;
+    if (plan.code === DEFAULT_PLAN_CODE) return user ? null : { href: "/signup", label: "Start for free" };
+    if (currentPlanIndex !== -1 && index < currentPlanIndex) return null;
+    const upgradePath = `/upgrade?plan=${encodeURIComponent(plan.code)}`;
+    return {
+      href: user ? upgradePath : `/login?next=${encodeURIComponent(upgradePath)}`,
+      label: plan.code === "enterprise" ? "Contact us" : `Upgrade to ${plan.name}`,
+    };
+  }
 
   if (plans.length === 0) {
     return <section className={styles.emptyState} role="status"><Building2 size={30} /><h2>Plans are temporarily unavailable.</h2><p>Please try again shortly to see current prices and limits.</p><a href="/pricing" className={styles.secondaryAction}>Reload plans <ArrowRight size={17} /></a></section>;
@@ -83,11 +96,12 @@ export function PricingPlans({ plans }: { plans: PlanRecord[] }) {
           const isFeatured = plan.code === FEATURED_PLAN_CODE;
           const Icon = plan.code === "basic" ? Store : isFeatured ? Layers : Building2;
           const description = plan.code === "basic" ? "A simple start for your first counter." : isFeatured ? "More room for busy teams and branches." : plan.code === "enterprise" ? "Capacity for a wider operation." : "Capacity for your everyday service.";
+          const action = cardAction(plan, index);
           return (
             <article
               key={plan.code}
               aria-labelledby={`plan-${plan.code}`}
-              className={`${styles.planCard} ${isFeatured ? styles.featuredCard : ""} ${isCurrent ? styles.currentCard : ""}`}
+              className={`${styles.planCard} ${isFeatured ? styles.featuredCard : ""} ${isCurrent ? styles.currentCard : ""} ${action ? styles.actionCard : ""}`}
               style={{ animationDelay: `${index * 90}ms` }}
             >
               <div className={styles.cardTop}><span className={styles.planIcon}><Icon size={28} strokeWidth={1.6} /></span>{isCurrent ? <span className={styles.currentBadge}><CheckCircle2 size={13} />Current plan</span> : isFeatured ? <span className={styles.featuredBadge}>Featured plan</span> : null}</div>
@@ -101,6 +115,7 @@ export function PricingPlans({ plans }: { plans: PlanRecord[] }) {
                 ))}
               </ul>
               {isCurrent && <Link href="/admin" className={styles.cardLink}>Manage your workspace <ArrowUpRight size={16} /></Link>}
+              {action && <Link href={action.href} className={styles.cardAction}>{action.label} <ArrowRight size={17} /></Link>}
             </article>
           );
         })}

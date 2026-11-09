@@ -36,6 +36,16 @@
 .features { display: grid; gap: 12px; list-style: none; margin-top: 14px; padding: 0; }
 .features li { display: flex; align-items: flex-start; gap: 10px; font-size: 16px; line-height: 1.6; color: #435b4c; }.features svg { flex-shrink: 0; color: var(--green); margin-top: 4px; }
 .cardLink { display: inline-flex; align-items: center; gap: 10px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--green); font-size: 14px; font-weight: 500; }
+/* The action link stretches over the whole card, so the card itself is clickable. */
+.actionCard { cursor: pointer; transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.actionCard:hover { border-color: #51af74; box-shadow: 0 14px 34px #1f7e351c; transform: translateY(-2px); }
+.actionCard:has(.cardAction:focus-visible) { border-color: var(--green); }
+.actionCard .features { margin-bottom: 22px; }
+.cardAction { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; margin-top: auto; padding: 12px 18px; border-radius: 14px; color: var(--green); border: 1px solid #bfd9c9; font-size: 15px; font-weight: 500; line-height: 1.5; }
+.cardAction::after { content: ""; position: absolute; inset: 0; border-radius: 22px; }
+.featuredCard .cardAction { color: #fff; border-color: transparent; background: linear-gradient(115deg, #17823a, #04633e); box-shadow: 0 5px 15px #13803a18; }
+.actionCard:hover .cardAction { background: #eef8f1; }
+.featuredCard.actionCard:hover .cardAction { background: linear-gradient(115deg, #106d30, #034f32); }
 .capacityNote { padding: 12px 10px 24px; color: var(--muted); text-align: center; font-size: 13px; line-height: 1.7; }
 .currentNotice { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; justify-content: space-between; margin: 0 8px 18px; padding: 16px 20px; border-radius: 16px; color: #245c3c; background: #eaf8ed; border: 1px solid #bddfc6; font-size: 15px; line-height: 1.6; }.currentNotice > span { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }.currentNotice a { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; }
 .planStatus { margin: 0 8px 18px; padding: 14px 18px; color: var(--muted); background: #f3f8f4; border-radius: 12px; font-size: 14px; line-height: 1.7; }.planStatus a { display: inline-flex; align-items: center; gap: 5px; color: var(--green); text-decoration: underline; }

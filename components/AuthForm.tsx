@@ -18,6 +18,10 @@ interface AuthFormProps {
   mode: AuthMode;
 }
 
+function safeNextPath(path: string | null): string | null {
+  return path?.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\") ? path : null;
+}
+
 export default function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
   const { user, acceptSession, isLoading } = useAuth();
@@ -35,9 +39,16 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [notice, setNotice] = useState("");
   const isSignup = mode === "signup";
+  const [nextPath, setNextPath] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isLoading && user) router.replace("/admin");
+    setNextPath(safeNextPath(new URLSearchParams(window.location.search).get("next")));
+  }, []);
+
+  useEffect(() => {
+    if (!isLoading && user) {
+      router.replace(safeNextPath(new URLSearchParams(window.location.search).get("next")) ?? "/admin");
+    }
   }, [isLoading, router, user]);
 
   useEffect(() => {
@@ -100,11 +111,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
       }
 
       acceptSession(result.user, result.accessToken);
-      const requestedPath = new URLSearchParams(window.location.search).get("next");
-      const destination = requestedPath?.startsWith("/") && !requestedPath.startsWith("//")
-        ? requestedPath
-        : "/admin";
-      router.replace(destination);
+      router.replace(safeNextPath(new URLSearchParams(window.location.search).get("next")) ?? "/admin");
     } catch {
       setError("Unable to reach the server. Check your connection and try again.");
     } finally {
@@ -324,7 +331,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
         <p className={styles.switchMode}>
           {isSignup ? "Already have an account? " : "New to MyTurn? "}
-          <Link href={isSignup ? "/login" : "/signup"}>
+          <Link href={`${isSignup ? "/login" : "/signup"}${nextPath ? `?next=${encodeURIComponent(nextPath)}` : ""}`}>
             {isSignup ? "Sign in" : "Create an account"}
           </Link>
         </p>

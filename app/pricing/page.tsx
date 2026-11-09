@@ -23,7 +23,7 @@ export default async function PricingPage() {
         <div className={styles.questionList}>
           <details><summary>Can I start for free?<span aria-hidden="true">+</span></summary><p>Yes. New accounts start on the free Basic plan, within its limits. Set up your queue and try the workflow with your own team.</p></details>
           <details><summary>What happens when I reach a limit?<span aria-hidden="true">+</span></summary><p>You cannot add more branches, services, queues, or staff than your plan allows. If you reach the daily ticket limit, new tickets are paused until the next day; your team can still serve existing tickets.</p></details>
-          <details><summary>Does signing up activate a paid plan?<span aria-hidden="true">+</span></summary><p>No. Creating an account starts you on Basic. The paid and custom plans shown here are for comparison; signing up does not purchase or activate them.</p></details>
+          <details><summary>Does signing up activate a paid plan?<span aria-hidden="true">+</span></summary><p>No. Creating an account starts you on Basic. To move to a paid or custom plan, choose it here and send an upgrade request; signing up alone does not purchase or activate one.</p></details>
         </div>
       </section>
     </div>
