@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { db } from "@/lib/db";
+import { getQueueEstimate } from "@/lib/expected-wait-time";
 import { isUuid } from "@/lib/staff-users";
 
 export interface TicketRecord {
@@ -11,8 +12,23 @@ export interface TicketRecord {
   service_name: string;
   // The counter that called the ticket; null while waiting or when the counter has no name.
   counter_name: string | null;
+  // Waiting tickets ahead that compete for the counters able to serve this one; 0 once called.
   people_ahead: number;
+  // Minutes until a counter is expected to call this ticket; null once called or when no
+  // enabled counter serves the service.
+  estimated_wait_minutes: number | null;
   created_at: Date;
+}
+
+type TicketRow = Omit<TicketRecord, "people_ahead" | "estimated_wait_minutes">;
+
+async function withQueueEstimate(client: Pool | PoolClient, ticket: TicketRow): Promise<TicketRecord> {
+  const estimate = ticket.status === "waiting" ? await getQueueEstimate(client, ticket.id) : null;
+  return {
+    ...ticket,
+    people_ahead: estimate?.people_ahead ?? 0,
+    estimated_wait_minutes: estimate?.estimated_wait_minutes ?? null,
+  };
 }
 
 export interface TicketFields {
@@ -62,21 +78,17 @@ export async function notifyBranchTicketsChanged(client: Pool | PoolClient, bran
 
 // Returns null when the ticket is not in the tenant or is from a previous day.
 export async function getTicket(tenantCode: string, ticketId: string): Promise<TicketRecord | null> {
-  const result = await db.query<TicketRecord>(
+  const result = await db.query<TicketRow>(
     `SELECT t.id, t.ticket_number, t.customer_name, t.status,
-            b.name AS branch_name, s.name AS service_name, t.counter_name,
-            (SELECT COUNT(*)::int FROM tickets ahead
-             WHERE ahead.branch_id = t.branch_id AND ahead.service_id = t.service_id
-               AND ahead.ticket_date = t.ticket_date
-               AND ahead.status = 'waiting' AND ahead.ticket_number < t.ticket_number) AS people_ahead,
-            t.created_at
+            b.name AS branch_name, s.name AS service_name, t.counter_name, t.created_at
      FROM tickets t
      JOIN branches b ON b.id = t.branch_id
      JOIN services s ON s.id = t.service_id
      WHERE t.id = $2 AND t.tenant_code = $1 AND t.ticket_date = CURRENT_DATE`,
     [tenantCode, ticketId],
   );
-  return result.rows[0] ?? null;
+  const ticket = result.rows[0];
+  return ticket ? withQueueEstimate(db, ticket) : null;
 }
 
 // Returns null when the branch or service does not belong to the tenant, or no counter in
@@ -89,7 +101,7 @@ export async function createTicket(
 ): Promise<TicketRecord | null> {
   // One statement: the branch and service are checked, the branch's daily counter is bumped,
   // and the ticket is saved with that number, so a number is never taken without its ticket.
-  const result = await client.query<TicketRecord>(
+  const result = await client.query<TicketRow>(
     `WITH target AS (
        SELECT b.id AS branch_id, b.tenant_code, b.name AS branch_name, s.name AS service_name
        FROM branches b
@@ -117,16 +129,13 @@ export async function createTicket(
        FROM ticket
      )
      SELECT ticket.id, ticket.ticket_number, ticket.customer_name, ticket.status,
-            target.branch_name, target.service_name, ticket.counter_name,
-            -- The new ticket is not visible to this count, so it only sees those already waiting.
-            (SELECT COUNT(*)::int FROM tickets t
-             WHERE t.branch_id = ticket.branch_id AND t.service_id = ticket.service_id
-               AND t.ticket_date = ticket.ticket_date AND t.status = 'waiting') AS people_ahead,
-            ticket.created_at
+            target.branch_name, target.service_name, ticket.counter_name, ticket.created_at
     FROM ticket, target, notified`,
     [tenantCode, fields.branch_id, fields.service_id, fields.customer_name],
   );
-  return result.rows[0] ?? null;
+  const ticket = result.rows[0];
+  // Runs after the insert on the same client, so the new ticket is visible to the estimate.
+  return ticket ? withQueueEstimate(client, ticket) : null;
 }
 
 export interface CounterTicket {

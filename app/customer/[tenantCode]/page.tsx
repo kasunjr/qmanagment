@@ -30,6 +30,9 @@ interface QueueTicket {
   // Set once a counter calls the ticket, if that counter has a name.
   counter_name: string | null;
   people_ahead: number;
+  // Minutes until a counter is expected to call the ticket, as of the last refresh; null when
+  // no counter serves the service. Missing on tickets saved before this field existed.
+  estimated_wait_minutes?: number | null;
 }
 
 const DAILY_LIMIT_MESSAGE =
@@ -197,6 +200,45 @@ function ThemeDropdown({
             </ul>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function formatWait(minutes: number, peopleAhead: number): string {
+  // Under a minute with people still ahead means the counters are running late.
+  if (minutes < 1) return peopleAhead === 0 ? "You're next" : "Shortly";
+  if (minutes < 60) return `~${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `~${hours} h ${rest} min` : `~${hours} h`;
+}
+
+// Counts the server's estimate down between refreshes. `ticket` changes identity on every
+// refresh, which restarts the countdown from the fresh estimate.
+function EstimatedWait({ minutes, ticket }: { minutes: number | null; ticket: QueueTicket }) {
+  const peopleAhead = ticket.people_ahead;
+  const [elapsedMinutes, setElapsedMinutes] = useState(0);
+
+  useEffect(() => {
+    setElapsedMinutes(0);
+    if (minutes === null) return;
+    const receivedAt = Date.now();
+    const timer = window.setInterval(
+      () => setElapsedMinutes(Math.floor((Date.now() - receivedAt) / 60_000)),
+      15_000,
+    );
+    return () => window.clearInterval(timer);
+  }, [minutes, ticket]);
+
+  return (
+    <div className="flex items-center gap-3 rounded-theme border border-theme-text/10 bg-theme-surface p-3">
+      <Clock aria-hidden="true" className="h-5 w-5 shrink-0 text-theme-primary" />
+      <div>
+        <div className="text-xs text-theme-text/60">Estimated wait</div>
+        <div className="text-xl font-bold text-theme-text" aria-live="polite">
+          {minutes === null ? "Not available" : formatWait(Math.max(0, minutes - elapsedMinutes), peopleAhead)}
+        </div>
       </div>
     </div>
   );
@@ -695,6 +737,10 @@ export default function CustomerPage({
               </div>
             </div>
           </div>
+
+          {ticket.status === "waiting" && (
+            <EstimatedWait minutes={ticket.estimated_wait_minutes ?? null} ticket={ticket} />
+          )}
 
           {ticket.status === "waiting" && (
             <div className="space-y-2">
