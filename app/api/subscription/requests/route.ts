@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
+import { sendUpgradeRequestNotice } from "@/lib/email";
 import { isUniqueViolation } from "@/lib/staff-users";
 import {
   createUpgradeRequest,
@@ -45,6 +46,13 @@ export async function POST(request: NextRequest) {
     if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
     const upgradeRequest = await createUpgradeRequest(user.tenant_code, planCode, note);
+
+    try {
+      await sendUpgradeRequestNotice({ ...upgradeRequest, tenant_code: user.tenant_code, email: user.email });
+    } catch (error) {
+      console.error(`Upgrade request notice email failed for request #${upgradeRequest.id}:`, error);
+    }
+
     return NextResponse.json({ request: upgradeRequest }, { status: 201 });
   } catch (error) {
     // The database allows one pending request per tenant, which also covers two clicks at once.

@@ -228,6 +228,65 @@ export async function sendStaffWelcomeEmail(staff: {
   });
 }
 
+
+export async function sendUpgradeRequestNotice(request: {
+  id: string;
+  tenant_code: string;
+  email: string;
+  plan_name: string;
+  note: string | null;
+  created_at: string;
+}): Promise<void> {
+  const username = process.env.GMAIL_USER;
+  if (!username) throw new Error("GMAIL_USER must be configured to send email.");
+
+  const requestedAt = new Date(request.created_at).toUTCString();
+  const rows: [string, string][] = [
+    ["Requested plan", request.plan_name],
+    ["Account email", request.email],
+    ["Tenant code", request.tenant_code],
+    ["Request number", `#${request.id}`],
+    ["Sent", requestedAt],
+  ];
+
+  await createTransporter().sendMail({
+    from: process.env.GMAIL_FROM || username,
+    to: username,
+    replyTo: request.email,
+    subject: `Upgrade request: ${request.plan_name} for ${request.tenant_code}`,
+    text: [
+      `New upgrade request #${request.id}`,
+      "",
+      ...rows.map(([label, value]) => `${label}: ${value}`),
+      `Note: ${request.note ?? "(none)"}`,
+      "",
+      "Reply to this email to contact the account owner with payment details.",
+    ].join("\n"),
+    html: `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>Upgrade request</title></head>
+<body bgcolor="#f3f8f4" style="margin:0;padding:0;background-color:#f3f8f4;color:#243c32;font-family:'Trebuchet MS',Arial,sans-serif;-webkit-text-size-adjust:100%;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f8f4"><tr><td align="center" style="padding:28px 12px;">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:600px;table-layout:fixed;border:1px solid #d5e5db;border-radius:22px;border-collapse:separate;background-color:#ffffff;">
+      <tr><td bgcolor="#eaf8e5" style="padding:26px 28px;background-color:#eaf8e5;border-radius:22px 22px 0 0;">
+        <p style="margin:0 0 10px;color:#087a3c;font-size:11px;font-weight:bold;line-height:18px;">NEW UPGRADE REQUEST</p>
+        <h1 style="margin:0;color:#243c32;font-size:26px;font-weight:bold;line-height:34px;word-break:break-word;">${escapeEmailHtml(request.plan_name)} requested by ${escapeEmailHtml(request.tenant_code)}</h1>
+      </td></tr>
+      <tr><td style="padding:22px 28px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
+          ${rows.map(([label, value]) => `<tr><td style="padding:9px 0;border-bottom:1px solid #e2ece5;color:#59646b;font-size:13px;line-height:21px;width:40%;">${label}</td><td style="padding:9px 0;border-bottom:1px solid #e2ece5;color:#243c32;font-size:14px;font-weight:bold;line-height:21px;word-break:break-all;">${escapeEmailHtml(value)}</td></tr>`).join("")}
+        </table>
+        <p style="margin:20px 0 6px;color:#59646b;font-size:13px;line-height:21px;">Note from the account owner</p>
+        <p style="margin:0;padding:14px 16px;background-color:#f2f8f3;border:1px solid #e0ece3;border-radius:11px;color:#243c32;font-size:14px;line-height:23px;white-space:pre-wrap;word-break:break-word;">${request.note ? escapeEmailHtml(request.note) : "<em style=\"color:#697c6f;\">No note</em>"}</p>
+      </td></tr>
+      <tr><td bgcolor="#f8fbf8" style="padding:18px 28px;background-color:#f8fbf8;border-top:1px solid #e2ece5;border-radius:0 0 22px 22px;"><p style="margin:0;color:#59646b;font-size:12px;line-height:21px;">Reply to this email to contact the account owner with payment details.</p></td></tr>
+    </table>
+  </td></tr></table>
+</body>
+</html>`,
+  });
+}
+
 export async function sendWelcomeEmail(email: string): Promise<void> {
   const username = process.env.GMAIL_USER;
   if (!username) {
